@@ -1,0 +1,175 @@
+import { useEffect, useRef } from 'react'
+import { Sparkle, Arrow } from './Icons.jsx'
+
+/* ============================================================
+ * "In Motion" — the globe spins continuously and smoothly.
+ *
+ * Instead of seeking frames (which stutters on a compressed
+ * clip), we PLAY the video and modulate its playbackRate from
+ * the user's scroll / swipe / drag velocity — so the faster you
+ * move, the faster the globe spins, always butter-smooth.
+ * ============================================================ */
+
+const reduced =
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+const IDLE = 0.35 // gentle continuous spin when idle
+const MAX = 2.25 // fastest spin — kept low so frame decoding stays smooth
+
+export default function ScrollScrubShowcase() {
+  const sectionRef = useRef(null)
+  const videoRef = useRef(null)
+
+  useEffect(() => {
+    const section = sectionRef.current
+    const video = videoRef.current
+    if (!section || !video) return
+    video.loop = true
+    video.muted = true
+
+    if (reduced) {
+      video.pause()
+      return
+    }
+
+    let boost = 0 // extra speed from user motion (decays)
+    let rate = IDLE // the rate actually applied (eased toward target)
+    let visible = false
+    let running = false
+    let raf = 0
+    let lastY = window.scrollY
+
+    const apply = () => {
+      const target = Math.min(MAX, Math.max(0.1, IDLE + boost))
+      // ease the applied rate toward the target so it never jumps — abrupt
+      // playbackRate changes are what make the decoder stutter.
+      rate += (target - rate) * 0.12
+      try {
+        if (Math.abs(video.playbackRate - rate) > 0.01) video.playbackRate = rate
+      } catch (e) {}
+      boost *= 0.94
+      if (boost < 0.01) boost = 0
+      if (running) raf = requestAnimationFrame(apply)
+    }
+    const startLoop = () => { if (!running) { running = true; raf = requestAnimationFrame(apply) } }
+    const stopLoop = () => { running = false; cancelAnimationFrame(raf) }
+
+    const addBoost = (amount) => { boost = Math.min(MAX, boost + amount) }
+
+    // any vertical page scroll (while in view) spins the globe
+    const onScroll = () => {
+      if (!visible) { lastY = window.scrollY; return }
+      const dy = window.scrollY - lastY
+      lastY = window.scrollY
+      addBoost(Math.abs(dy) * 0.008)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+
+    // horizontal trackpad swipe spins (and doesn't hijack vertical)
+    const onWheel = (e) => {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        e.preventDefault()
+        addBoost(Math.abs(e.deltaX) * 0.01)
+      }
+    }
+    section.addEventListener('wheel', onWheel, { passive: false })
+
+    // mouse drag spins
+    let dragging = false
+    let lastX = 0
+    const onDown = (e) => {
+      if (e.pointerType && e.pointerType !== 'mouse') return
+      dragging = true
+      lastX = e.clientX
+      section.setPointerCapture?.(e.pointerId)
+    }
+    const onMove = (e) => {
+      if (!dragging) return
+      const dx = e.clientX - lastX
+      lastX = e.clientX
+      addBoost(Math.abs(dx) * 0.018)
+    }
+    const onUp = (e) => {
+      dragging = false
+      try { section.releasePointerCapture?.(e.pointerId) } catch (err) {}
+    }
+    section.addEventListener('pointerdown', onDown)
+    section.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+
+    const io = new IntersectionObserver(
+      ([en]) => {
+        visible = en.isIntersecting
+        if (visible) {
+          lastY = window.scrollY
+          video.play?.().catch(() => {})
+          startLoop()
+        } else {
+          video.pause?.()
+          stopLoop()
+        }
+      },
+      { threshold: 0 },
+    )
+    io.observe(section)
+
+    return () => {
+      stopLoop()
+      io.disconnect()
+      window.removeEventListener('scroll', onScroll)
+      section.removeEventListener('wheel', onWheel)
+      section.removeEventListener('pointerdown', onDown)
+      section.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [])
+
+  return (
+    <section
+      ref={sectionRef}
+      className="relative h-screen w-full select-none overflow-hidden bg-ink-950"
+      style={{ cursor: reduced ? 'default' : 'grab' }}
+    >
+      <video
+        ref={videoRef}
+        src="/ds-city-1.mp4"
+        muted
+        loop
+        autoPlay
+        playsInline
+        preload="auto"
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+
+      {/* legibility wash */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/40 to-ink-950/60" aria-hidden="true" />
+
+      {/* anchored caption */}
+      <div className="pointer-events-none absolute inset-0 flex items-center">
+        <div className="container-max">
+          <div className="max-w-xl">
+            <div className="eyebrow">
+              <Sparkle className="h-3.5 w-3.5" /> In Motion
+            </div>
+            <h2 className="mt-5 font-display text-4xl font-bold leading-[1.08] tracking-tight text-gray-50 sm:text-5xl lg:text-6xl">
+              Every detail, engineered to{' '}
+              <span className="text-gold-gradient">unfold.</span>
+            </h2>
+            <p className="mt-5 max-w-lg text-base leading-relaxed text-gray-300 sm:text-lg">
+              The same obsessive craft we bring to every website, app, and
+              system we build.
+            </p>
+            {!reduced && (
+              <div className="mt-7 flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-200/80">
+                Scroll or drag to spin faster
+                <Arrow className="h-4 w-4" />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
