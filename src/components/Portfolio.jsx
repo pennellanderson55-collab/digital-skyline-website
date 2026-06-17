@@ -32,8 +32,8 @@ const ITEMS = [
   { id: 9, type: 'video', category: 'Landing Page', tag: 'Landing Page', title: 'Farios', desc: 'A walkthrough of the Farios plumbing landing page.', grad: 'g5', glow: 'left-[18%] top-[24%]', src: '/fario.mov', poster: '/fario.png' },
   { id: 5, type: 'image', category: 'Dashboards', tag: 'Dashboard', title: 'Hayes Properties', desc: 'A property-owner dashboard — track units, tenants, and performance at a glance.', grad: 'g5', glow: 'left-[20%] top-[28%]', src: '/hayes-dashboard.png', full: '/hayes-dashboard.png' },
   { id: 6, type: 'video', category: 'Dashboards', tag: 'Dashboard', title: 'Hayes Properties', desc: 'A walkthrough of the Hayes Properties owner dashboard in action.', grad: 'g6', glow: 'right-[20%] top-[22%]', src: '/hayes-dashboard.mov', poster: '/hayes-dashboard.png' },
-  { id: 1, type: 'image', category: 'Websites', tag: 'Website', title: 'KnightSoul', desc: 'A KnightSoul game build.', grad: 'g1', glow: 'left-[15%] top-[20%]', src: '/Knightsoul2.png', full: '/Knightsoul2.png' },
-  { id: 2, type: 'video', category: 'Websites', tag: 'Website', title: 'KnightSoul', desc: 'A walkthrough of the KnightSoul game.', grad: 'g2', glow: 'right-[18%] top-[30%]', src: '/KnightSoul.mov', poster: '/Knightsoul2.png' },
+  { id: 1, type: 'image', category: 'Website', tag: 'Website', title: 'Legacy Quest', desc: 'A premium family legacy platform designed to organize memories, goals, family members, and long-term growth.', grad: 'g1', glow: 'left-[15%] top-[20%]', src: 'https://bjfuopeqaodksjkhrqda.supabase.co/storage/v1/object/public/Portfolio/Knightsoul2.png', full: 'https://bjfuopeqaodksjkhrqda.supabase.co/storage/v1/object/public/Portfolio/Knightsoul2.png' },
+  { id: 2, type: 'video', category: 'Website', tag: 'Website', title: 'KnightSoul', desc: 'A cinematic gaming landing page built with immersive visuals, motion, and interactive web design.', grad: 'g2', glow: 'right-[18%] top-[30%]', src: 'https://bjfuopeqaodksjkhrqda.supabase.co/storage/v1/object/public/Portfolio/KnightSoulCompressed.mp4', full: 'https://bjfuopeqaodksjkhrqda.supabase.co/storage/v1/object/public/Portfolio/KnightSoulCompressed.mp4', poster: 'https://bjfuopeqaodksjkhrqda.supabase.co/storage/v1/object/public/Portfolio/Knightsoul2.png' },
   { id: 3, type: 'image', category: 'Apps', tag: 'App', title: 'Legacy Quest', desc: 'The Family Operating System — organize traditions, build ventures, shape generations.', grad: 'g3', glow: 'left-[25%] bottom-[25%]', src: '/legacy-quest.jpg', full: '/legacy-quest-full.jpg', pos: '50% 50%' },
   { id: 4, type: 'video', category: 'Apps', tag: 'App', title: 'Legacy Quest', desc: 'A walkthrough of Legacy Quest — touring the Family Operating System and how it organizes traditions, ventures, and generations.', grad: 'g4', glow: 'right-[22%] bottom-[20%]', src: '/legacy-quest-video.mov', poster: '/legacy-quest.jpg' },
 ]
@@ -68,6 +68,7 @@ function PortfolioCard({ item, onView }) {
               loop
               autoPlay
               playsInline
+              preload="metadata"
               onError={() => setMediaOk(false)}
               className="absolute inset-0 h-full w-full"
               style={{ objectFit: item.fit || 'cover', objectPosition: item.pos || 'center' }}
