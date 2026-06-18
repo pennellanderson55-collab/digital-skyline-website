@@ -18,6 +18,8 @@ import ScrollScrubShowcase from './components/ScrollScrubShowcase.jsx'
 import Privacy from './pages/Privacy.jsx'
 import Terms from './pages/Terms.jsx'
 import Status from './pages/Status.jsx'
+import ThankYou from './pages/ThankYou.jsx'
+import ConsultationConfirmed from './pages/ConsultationConfirmed.jsx'
 import Admin from './admin/Admin.jsx'
 
 function Home() {
@@ -43,13 +45,15 @@ function Home() {
 
 export default function App() {
   const { pathname } = useLocation()
-  // The internal admin dashboard is a separate workspace — keep the marketing-site
-  // chrome (loader, easter egg, sound, smooth-scroll) off of it.
-  const isAdmin = pathname.startsWith('/admin')
+  // The internal admin dashboard and the post-conversion pages are standalone
+  // experiences — keep the marketing-site chrome (loader intro, easter egg,
+  // sound, smooth-scroll) off of them.
+  const bareRoutes = ['/admin', '/thank-you', '/consultation-confirmed']
+  const isBare = bareRoutes.some((r) => pathname.startsWith(r))
 
   return (
     <>
-      {!isAdmin && (
+      {!isBare && (
         <>
           <Loader />
           <EasterEgg />
@@ -62,6 +66,8 @@ export default function App() {
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/status" element={<Status />} />
+        <Route path="/thank-you" element={<ThankYou />} />
+        <Route path="/consultation-confirmed" element={<ConsultationConfirmed />} />
         <Route path="/admin" element={<Admin />} />
       </Routes>
     </>
