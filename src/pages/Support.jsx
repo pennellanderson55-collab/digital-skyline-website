@@ -4,6 +4,7 @@ import CustomCursor from '../components/CustomCursor.jsx'
 import Navbar from '../components/Navbar.jsx'
 import Footer from '../components/Footer.jsx'
 import usePageMeta from '../lib/usePageMeta.js'
+import { supabase } from '../lib/supabase.js'
 import { Activity, Lock, Code, Sparkle, Arrow, Check } from '../components/Icons.jsx'
 
 // Where support requests are sent. FormSubmit.co relays to this inbox without a
@@ -96,6 +97,23 @@ export default function Support() {
     e.preventDefault()
     if (!validate()) return
     setSubmitting(true)
+
+    // Store the request so it appears in the admin Support tab (Section 7).
+    // Best-effort — never blocks the confirmation if Supabase isn't configured.
+    if (supabase) {
+      try {
+        await supabase.from('support_requests').insert({
+          project_reference: form.reference.trim() || null,
+          client_name: form.name.trim(),
+          company: form.company.trim() || null,
+          email: form.email.trim(),
+          support_type: form.type,
+          message: form.message.trim(),
+        })
+      } catch {
+        /* request storage is best-effort — FormSubmit + mailto still cover it */
+      }
+    }
 
     // Best-effort delivery via FormSubmit (no backend needed). Whether or not
     // this succeeds we still show the confirmation, with a mailto fallback link.

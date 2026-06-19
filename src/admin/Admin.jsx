@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { Check, Arrow, Sparkle } from '../components/Icons.jsx'
+import Clients from './Clients.jsx'
+import Projects from './Projects.jsx'
+import Support, { SupportModal } from './Support.jsx'
+import ProjectProfile from './ProjectProfile.jsx'
+import { INITIAL_PROJECT_STAGE, balanceDue, fmtMoney, fmtDateTime } from './ops.js'
 
 const STATUSES = [
   'New', 'Contacted', 'Consultation Scheduled',
@@ -141,23 +146,44 @@ function Login() {
 
 /* -------------------------------------------------------------- dashboard */
 
-const TABS = ['Home', 'Consultations', 'Pipeline', 'Analytics']
+const TABS = ['Home', 'Consultations', 'Pipeline', 'Clients', 'Projects', 'Support', 'Analytics']
 
 function Dashboard({ session }) {
   const [tab, setTab] = useState('Home')
-  const [rows, setRows] = useState([])
+  const [rows, setRows] = useState([])          // consultations / leads
+  const [projects, setProjects] = useState([])  // projects + embedded client
+  const [support, setSupport] = useState([])    // support requests
+  const [history, setHistory] = useState([])    // project stage history
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [active, setActive] = useState(null) // row open in detail modal
+  const [active, setActive] = useState(null)            // consultation detail modal
+  const [activeProject, setActiveProject] = useState(null) // open client/project profile
+  const [activeSupport, setActiveSupport] = useState(null) // support detail modal
+
+  // Derive the client list from the projects join (clients 1──1 project for now).
+  const clients = useMemo(() => {
+    const map = new Map()
+    projects.forEach((p) => { if (p.client) map.set(p.client.id, p.client) })
+    return [...map.values()]
+  }, [projects])
 
   const load = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('consultations')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (error) setError(error.message)
-    else setRows(data || [])
+    // Consultations are required (existing system). The Phase-2 tables are
+    // loaded best-effort so the dashboard still works before ops.sql is run.
+    const cons = await supabase.from('consultations').select('*').order('created_at', { ascending: false })
+    if (cons.error) setError(cons.error.message)
+    else setRows(cons.data || [])
+
+    const proj = await supabase.from('projects').select('*, client:clients(*)').order('created_at', { ascending: false })
+    if (!proj.error) setProjects(proj.data || [])
+
+    const sup = await supabase.from('support_requests').select('*').order('created_at', { ascending: false })
+    if (!sup.error) setSupport(sup.data || [])
+
+    const hist = await supabase.from('project_stage_history').select('*').order('changed_at', { ascending: false })
+    if (!hist.error) setHistory(hist.data || [])
+
     setLoading(false)
   }
 
@@ -169,6 +195,77 @@ function Dashboard({ session }) {
     const { error } = await supabase.from('consultations').update(patch).eq('id', id)
     if (error) { setError(error.message); load() }
   }
+
+  const updateProject = async (id, patch) => {
+    setProjects((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+    setActiveProject((a) => (a && a.id === id ? { ...a, ...patch } : a))
+    const { error } = await supabase.from('projects').update(patch).eq('id', id)
+    if (error) { setError(error.message); load() }
+  }
+
+  const updateClient = async (clientId, patch) => {
+    setProjects((ps) => ps.map((p) => (p.client_id === clientId ? { ...p, client: { ...p.client, ...patch } } : p)))
+    setActiveProject((a) => (a && a.client_id === clientId ? { ...a, client: { ...a.client, ...patch } } : a))
+    const { error } = await supabase.from('clients').update(patch).eq('id', clientId)
+    if (error) { setError(error.message); load() }
+  }
+
+  const changeStage = async (project, stage) => {
+    if (project.stage === stage) return
+    await updateProject(project.id, { stage })
+    const { data } = await supabase
+      .from('project_stage_history')
+      .insert({ project_id: project.id, project_reference: project.project_reference, stage })
+      .select().single()
+    if (data) setHistory((h) => [data, ...h])
+  }
+
+  const updateSupport = async (id, patch) => {
+    setSupport((s) => s.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+    setActiveSupport((a) => (a && a.id === id ? { ...a, ...patch } : a))
+    const { error } = await supabase.from('support_requests').update(patch).eq('id', id)
+    if (error) { setError(error.message); load() }
+  }
+
+  // Section 1 — Convert a consultation into a Client + Project with a unique
+  // Project Reference (DS-YYYY-NNN). Returns the new reference.
+  const convertToClient = async (c) => {
+    const { data: ref, error: refErr } = await supabase.rpc('next_project_reference')
+    if (refErr || !ref) throw new Error(refErr?.message || 'Could not generate a project reference.')
+
+    const { data: client, error: cErr } = await supabase.from('clients').insert({
+      consultation_id: c.id,
+      company_name: c.business || c.name,
+      contact_name: c.name,
+      email: c.email,
+      phone: c.phone || null,
+      industry: classifyIndustry(c.business),
+    }).select().single()
+    if (cErr) throw new Error(cErr.message)
+
+    const { data: project, error: pErr } = await supabase.from('projects').insert({
+      project_reference: ref,
+      client_id: client.id,
+      project_type: c.project_type || null,
+      stage: INITIAL_PROJECT_STAGE,
+    }).select('*, client:clients(*)').single()
+    if (pErr) throw new Error(pErr.message)
+
+    await supabase.from('project_stage_history').insert({
+      project_id: project.id, project_reference: ref, stage: INITIAL_PROJECT_STAGE, note: 'Converted from consultation',
+    })
+    await supabase.from('consultations')
+      .update({ converted: true, client_id: client.id, project_reference: ref, status: 'Closed Won' })
+      .eq('id', c.id)
+
+    // Reflect locally without a full reload jank.
+    setProjects((ps) => [project, ...ps])
+    setRows((rs) => rs.map((r) => (r.id === c.id
+      ? { ...r, converted: true, client_id: client.id, project_reference: ref, status: 'Closed Won' } : r)))
+    return ref
+  }
+
+  const openTab = (t) => { setTab(t); setActiveProject(null) }
 
   return (
     <Shell>
@@ -191,9 +288,9 @@ function Dashboard({ session }) {
         {TABS.map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => openTab(t)}
             className={`rounded-xl border px-4 py-2 text-sm transition-colors ${
-              tab === t
+              tab === t && !activeProject
                 ? 'border-gold-400/60 bg-gold-400/10 text-gold-100'
                 : 'border-white/10 bg-white/[0.02] text-gray-300 hover:border-gold-400/40'
             }`}
@@ -207,14 +304,26 @@ function Dashboard({ session }) {
 
       <div className="mt-8">
         {loading ? (
-          <p className="text-gray-500">Loading consultations…</p>
+          <p className="text-gray-500">Loading…</p>
+        ) : activeProject ? (
+          <ProjectProfile
+            project={activeProject}
+            history={history.filter((h) => h.project_id === activeProject.id)}
+            onClose={() => setActiveProject(null)}
+            onSaveProject={(patch) => updateProject(activeProject.id, patch)}
+            onSaveClient={(patch) => updateClient(activeProject.client_id, patch)}
+            onStageChange={(stage) => changeStage(activeProject, stage)}
+          />
         ) : (
           <>
-            {tab === 'Home' && <Home rows={rows} />}
+            {tab === 'Home' && <Home consultations={rows} clients={clients} projects={projects} support={support} history={history} />}
             {tab === 'Consultations' && (
               <Consultations rows={rows} onOpen={setActive} onStatus={updateRow} />
             )}
             {tab === 'Pipeline' && <Pipeline rows={rows} onStatus={updateRow} onOpen={setActive} />}
+            {tab === 'Clients' && <Clients projects={projects} onOpen={setActiveProject} />}
+            {tab === 'Projects' && <Projects projects={projects} onOpen={setActiveProject} onStageChange={changeStage} />}
+            {tab === 'Support' && <Support rows={support} onStatus={updateSupport} onOpen={setActiveSupport} />}
             {tab === 'Analytics' && <Analytics rows={rows} />}
           </>
         )}
@@ -226,6 +335,17 @@ function Dashboard({ session }) {
           onClose={() => setActive(null)}
           onStatus={(s) => updateRow(active.id, { status: s })}
           onSaveNotes={(n) => updateRow(active.id, { admin_notes: n })}
+          onConvert={() => convertToClient(active)}
+          onConverted={() => { setActive(null); setTab('Clients') }}
+        />
+      )}
+
+      {activeSupport && (
+        <SupportModal
+          row={activeSupport}
+          onClose={() => setActiveSupport(null)}
+          onStatus={(s) => updateSupport(activeSupport.id, { status: s })}
+          onSaveNotes={(n) => updateSupport(activeSupport.id, { admin_notes: n })}
         />
       )}
     </Shell>
@@ -234,35 +354,82 @@ function Dashboard({ session }) {
 
 /* ------------------------------------------------------------------- home */
 
-function Home({ rows }) {
-  // Recomputes only when `rows` changes — not on every parent re-render.
-  const stats = useMemo(() => {
+function Home({ consultations, clients, projects, support, history }) {
+  const { kpis, activity } = useMemo(() => {
     const now = new Date()
-    const count = (s) => rows.filter((r) => r.status === s).length
-    const thisMonth = rows.filter((r) => {
-      if (!r.created_at) return false
-      const d = new Date(r.created_at)
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-    }).length
+    const sameMonth = (d) => d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
 
-    return [
-      { label: 'Total consultations', value: rows.length },
-      { label: 'New leads', value: count('New') },
-      { label: 'Contacted leads', value: count('Contacted') },
-      { label: 'Closed Won', value: count('Closed Won') },
-      { label: 'Closed Lost', value: count('Closed Lost') },
-      { label: 'This month', value: thisMonth },
+    const activeLeads = consultations.filter(
+      (r) => !r.converted && r.status !== 'Closed Won' && r.status !== 'Closed Lost'
+    ).length
+    const inProgress = projects.filter((p) => p.stage !== 'Completed' && p.stage !== 'Lead').length
+    const launching = projects.filter((p) => p.launch_date && sameMonth(new Date(p.launch_date))).length
+    const openTickets = support.filter((s) => s.status !== 'Resolved' && s.status !== 'Closed').length
+    const revenue = projects.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0)
+    const outstanding = projects.reduce((sum, p) => sum + balanceDue(p), 0)
+
+    const kpis = [
+      { label: 'Active Leads', value: activeLeads },
+      { label: 'Active Clients', value: clients.length },
+      { label: 'Projects In Progress', value: inProgress },
+      { label: 'Launching This Month', value: launching },
+      { label: 'Open Support Tickets', value: openTickets },
+      { label: 'Revenue Closed', value: fmtMoney(revenue) },
+      { label: 'Outstanding Balance', value: fmtMoney(outstanding) },
     ]
-  }, [rows])
+
+    // Recent activity feed — merge events across the system, newest first.
+    const events = []
+    consultations.forEach((r) => events.push({ at: r.created_at, kind: 'Consultation', label: `New consultation — ${r.name}` }))
+    clients.forEach((c) => events.push({ at: c.created_at, kind: 'Client', label: `New client — ${c.company_name || c.contact_name}` }))
+    support.forEach((s) => events.push({ at: s.created_at, kind: 'Support', label: `Support request — ${s.client_name || s.email}` }))
+    history.forEach((h) => events.push({ at: h.changed_at, kind: 'Project', label: `${h.project_reference} → ${h.stage}` }))
+    const activity = events
+      .filter((e) => e.at)
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+      .slice(0, 10)
+
+    return { kpis, activity }
+  }, [consultations, clients, projects, support, history])
+
+  const KIND_STYLES = {
+    Consultation: 'text-sky-200',
+    Client: 'text-emerald-200',
+    Support: 'text-amber-200',
+    Project: 'text-violet-200',
+  }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {stats.map((s) => (
-        <div key={s.label} className="card-surface p-6 shadow-card">
-          <div className="font-display text-4xl font-bold text-gold-gradient">{s.value}</div>
-          <div className="mt-2 text-sm text-gray-400">{s.label}</div>
-        </div>
-      ))}
+    <div className="space-y-8">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {kpis.map((s) => (
+          <div key={s.label} className="card-surface p-6 shadow-card">
+            <div className="font-display text-3xl font-bold text-gold-gradient">{s.value}</div>
+            <div className="mt-2 text-sm text-gray-400">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card-surface p-6 shadow-card">
+        <h3 className="font-display text-lg font-semibold text-gray-50">Recent Activity</h3>
+        {activity.length === 0 ? (
+          <p className="mt-4 text-sm text-gray-500">No activity yet.</p>
+        ) : (
+          <ul className="mt-4 divide-y divide-white/[0.06]">
+            {activity.map((e, i) => (
+              <li key={i} className="flex items-center justify-between gap-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className={`font-mono text-[10px] uppercase tracking-wider ${KIND_STYLES[e.kind] || 'text-gray-400'}`}>
+                    {e.kind}
+                  </span>
+                  <span className="text-sm text-gray-200">{e.label}</span>
+                </div>
+                <span className="shrink-0 font-mono text-[11px] text-gray-500">{fmtDateTime(e.at)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
@@ -457,13 +624,33 @@ function BarCard({ title, data, total, note }) {
 
 /* ------------------------------------------------------------ detail modal */
 
-function DetailModal({ row, onClose, onStatus, onSaveNotes }) {
+function DetailModal({ row, onClose, onStatus, onSaveNotes, onConvert, onConverted }) {
   const [notes, setNotes] = useState(row.admin_notes || '')
   const [saved, setSaved] = useState(false)
+  const [converting, setConverting] = useState(false)
+  const [convError, setConvError] = useState('')
+  const [newRef, setNewRef] = useState(row.project_reference || null)
 
-  useEffect(() => { setNotes(row.admin_notes || ''); setSaved(false) }, [row.id, row.admin_notes])
+  useEffect(() => {
+    setNotes(row.admin_notes || ''); setSaved(false)
+    setNewRef(row.project_reference || null); setConvError('')
+  }, [row.id, row.admin_notes, row.project_reference])
 
   const save = () => { onSaveNotes(notes); setSaved(true) }
+
+  const convert = async () => {
+    setConverting(true); setConvError('')
+    try {
+      const ref = await onConvert()
+      setNewRef(ref)
+    } catch (e) {
+      setConvError(e.message || 'Conversion failed. Make sure ops.sql has been run in Supabase.')
+    } finally {
+      setConverting(false)
+    }
+  }
+
+  const converted = row.converted || Boolean(newRef)
 
   const answers = [
     ['Business & services', row.business],
@@ -504,6 +691,31 @@ function DetailModal({ row, onClose, onStatus, onSaveNotes }) {
         <div className="mt-5">
           <span className="mb-2 block font-mono text-[11px] uppercase tracking-wider text-gray-500">Status</span>
           <StatusSelect value={row.status} onChange={onStatus} />
+        </div>
+
+        {/* Section 1 — Convert To Client */}
+        <div className="mt-5 rounded-xl border border-gold-400/20 bg-gold-400/[0.04] p-4">
+          {converted ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-mono text-[11px] uppercase tracking-wider text-gray-500">Converted to client</div>
+                <div className="mt-1 font-mono text-sm text-gold-200">{newRef || row.project_reference}</div>
+              </div>
+              {onConverted && (
+                <button onClick={onConverted} className="btn-ghost text-xs">View in Clients</button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-gray-300">
+                Create a client + project record and generate a Project Reference.
+              </p>
+              <button onClick={convert} disabled={converting} className="btn-gold text-sm disabled:opacity-60">
+                {converting ? 'Converting…' : (<>Convert To Client <Arrow className="h-4 w-4" /></>)}
+              </button>
+            </div>
+          )}
+          {convError && <p className="mt-2 text-xs text-rose-400">{convError}</p>}
         </div>
 
         <div className="mt-6 space-y-4 border-t border-white/[0.08] pt-6">
