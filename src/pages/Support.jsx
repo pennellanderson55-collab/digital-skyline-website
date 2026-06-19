@@ -267,6 +267,7 @@ export default function Support() {
                           value={form.reference}
                           onChange={update('reference')}
                           placeholder="DS-CLIENT-001 or INV-0001"
+                          helper="If you have been given a project reference or invoice number, enter it here. Otherwise leave blank."
                         />
                       </div>
 
@@ -326,7 +327,7 @@ export default function Support() {
   )
 }
 
-function Field({ label, error, optional, required, type = 'text', ...props }) {
+function Field({ label, error, helper, optional, required, type = 'text', ...props }) {
   return (
     <div>
       <label className="mb-2 block font-display text-sm text-gray-300">
@@ -341,7 +342,11 @@ function Field({ label, error, optional, required, type = 'text', ...props }) {
           error ? 'border-red-400/60 focus:border-red-400' : 'border-white/10 focus:border-gold-400/60'
         }`}
       />
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
+      {error ? (
+        <p className="mt-1.5 text-xs text-red-400">{error}</p>
+      ) : (
+        helper && <p className="mt-1.5 text-xs text-gray-500">{helper}</p>
+      )}
     </div>
   )
 }

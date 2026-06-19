@@ -46,8 +46,6 @@ export default function ClientPortal() {
     const errs = {}
     if (!form.clientName.trim()) errs.clientName = 'Please enter your name'
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Enter a valid email'
-    if (!form.invoiceNumber.trim())
-      errs.invoiceNumber = 'Please enter your project reference or invoice number.'
     const amount = Number(form.amount)
     if (!form.amount || Number.isNaN(amount) || amount <= 0)
       errs.amount = 'Enter a valid payment amount'
@@ -246,11 +244,11 @@ export default function ClientPortal() {
 
                   <Field
                     label="Project Reference / Invoice Number"
-                    required
+                    optional
                     value={form.invoiceNumber}
                     onChange={update('invoiceNumber')}
                     placeholder="DS-CLIENT-001 or INV-0001"
-                    error={errors.invoiceNumber}
+                    helper="If you have been given a project reference or invoice number, enter it here. Otherwise leave blank."
                   />
 
                   <Field
@@ -371,7 +369,7 @@ function ActionCard({ icon: Icon, title, desc, soon, delay = 0, children }) {
   )
 }
 
-function Field({ label, error, optional, required, type = 'text', ...props }) {
+function Field({ label, error, helper, optional, required, type = 'text', ...props }) {
   return (
     <div>
       <label className="mb-2 block font-display text-sm text-gray-300">
@@ -386,7 +384,11 @@ function Field({ label, error, optional, required, type = 'text', ...props }) {
           error ? 'border-red-400/60 focus:border-red-400' : 'border-white/10 focus:border-gold-400/60'
         }`}
       />
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
+      {error ? (
+        <p className="mt-1.5 text-xs text-red-400">{error}</p>
+      ) : (
+        helper && <p className="mt-1.5 text-xs text-gray-500">{helper}</p>
+      )}
     </div>
   )
 }
