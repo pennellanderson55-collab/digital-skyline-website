@@ -20,6 +20,7 @@ import Terms from './pages/Terms.jsx'
 import Status from './pages/Status.jsx'
 import ThankYou from './pages/ThankYou.jsx'
 import ConsultationConfirmed from './pages/ConsultationConfirmed.jsx'
+import ClientPortal from './pages/ClientPortal.jsx'
 import Admin from './admin/Admin.jsx'
 
 function Home() {
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="/status" element={<Status />} />
         <Route path="/thank-you" element={<ThankYou />} />
         <Route path="/consultation-confirmed" element={<ConsultationConfirmed />} />
+        <Route path="/client-portal" element={<ClientPortal />} />
         <Route path="/admin" element={<Admin />} />
       </Routes>
     </>

@@ -19,6 +19,12 @@ const SECTION_HREFS = {
   About: '#top',
 }
 
+// Internal route targets (rendered as SPA links, not in-page anchors)
+const ROUTE_HREFS = {
+  'Client Portal': '/client-portal',
+  'Pay Invoice': '/client-portal#payment',
+}
+
 const COLS = [
   {
     title: 'Services',
@@ -27,6 +33,10 @@ const COLS = [
   {
     title: 'Company',
     links: ['Work', 'Pricing', 'FAQ', 'About'],
+  },
+  {
+    title: 'Portal',
+    links: ['Client Portal', 'Pay Invoice', 'Support'],
   },
   {
     title: 'Connect',
@@ -38,7 +48,7 @@ export default function Footer() {
   return (
     <footer className="relative border-t border-white/[0.08] bg-ink-900/40">
       <div className="container-max py-14">
-        <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
           <div>
             <a href="#top" className="flex items-center gap-3" aria-label="Digital Skyline Co. — home">
               <span className="block h-20 w-20 overflow-hidden rounded-full">
@@ -61,15 +71,28 @@ export default function Footer() {
               </h4>
               <ul className="mt-4 space-y-2.5">
                 {c.links.map((l) => {
+                  const cls = 'text-sm text-gray-400 transition-colors hover:text-gold-200'
+                  // Internal route links (Client Portal / Pay Invoice)
+                  if (ROUTE_HREFS[l]) {
+                    return (
+                      <li key={l}>
+                        <Link to={ROUTE_HREFS[l]} className={cls}>{l}</Link>
+                      </li>
+                    )
+                  }
                   const social = SOCIALS[l]
-                  const href = SECTION_HREFS[l] || (l.includes('@') ? `mailto:${l}` : social || '#')
+                  // 'Support' routes to the contact section on the home page.
+                  const href =
+                    l === 'Support'
+                      ? '/#consultation'
+                      : SECTION_HREFS[l] || (l.includes('@') ? `mailto:${l}` : social || '#')
                   const external = Boolean(social)
                   return (
                     <li key={l}>
                       <a
                         href={href}
                         {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                        className="text-sm text-gray-400 transition-colors hover:text-gold-200"
+                        className={cls}
                       >
                         {l}
                       </a>

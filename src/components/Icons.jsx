@@ -122,6 +122,14 @@ export const Image = (p) => (
   </svg>
 )
 
+export const Lock = (p) => (
+  <svg {...base} className={p.className}>
+    <rect x="4" y="11" width="16" height="9" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    <path d="M12 15v2" />
+  </svg>
+)
+
 export const Play = (p) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={p.className} aria-hidden="true">
     <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14Z" />
