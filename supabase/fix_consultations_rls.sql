@@ -18,13 +18,15 @@ alter table public.consultations alter column status set default 'New';
 -- 3. RLS evaluates ON TOP of table privileges — anon needs INSERT on the table.
 grant insert on table public.consultations to anon;
 
--- 4. Recreate the anon INSERT policy (locked to brand-new leads only).
+-- 4. Recreate the anon INSERT policy. Accept status = 'New' OR an unset (NULL)
+--    status, so an omitted status (which collapses to NULL if the column default
+--    is ever missing) is not rejected. Anon still cannot set any other status.
 drop policy if exists "anon can insert bookings" on public.consultations;
 create policy "anon can insert bookings"
   on public.consultations
   for insert
   to anon
-  with check (status = 'New');
+  with check (status = 'New' or status is null);
 
 -- ── Verify (optional) ───────────────────────────────────────────────────────
 -- SELECT policyname, cmd, roles, with_check
