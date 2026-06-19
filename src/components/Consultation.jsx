@@ -182,6 +182,8 @@ export default function Consultation() {
     }
 
     const row = {
+      // Explicit so the row satisfies the RLS policy: WITH CHECK (status = 'New').
+      status: 'New',
       date: toISODate(selected),
       time,
       name: form.name.trim(),
