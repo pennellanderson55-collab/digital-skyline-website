@@ -202,6 +202,10 @@ export default function Consultation() {
     const { error } = await supabase.from('consultations').insert(row)
 
     if (error) {
+      // Surface the exact reason — the booking save is what fails here, NOT email.
+      console.error('[consultation] Supabase insert failed:', {
+        message: error.message, code: error.code, details: error.details, hint: error.hint,
+      })
       // 23505 = unique violation → slot was taken between check and insert.
       if (error.code === '23505') {
         setBookedTimes(await fetchBooked(selected))
@@ -214,8 +218,12 @@ export default function Consultation() {
       return
     }
 
-    // Confirmation to the client + notification to the team (best-effort).
-    await sendEmail('consultation', row)
+    // ✅ Booking saved. Redirect immediately. The confirmation + team-notification
+    // email is fire-and-forget — it must NEVER block or fail the booking, and any
+    // email error is logged only (the client never sees "Something went wrong").
+    sendEmail('consultation', row).then((ok) => {
+      if (!ok) console.error('[consultation] confirmation email did not send (booking still saved)')
+    })
 
     setSubmitting(false)
     navigate('/consultation-confirmed', {

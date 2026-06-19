@@ -259,8 +259,9 @@ function Dashboard({ session }) {
       .update({ converted: true, client_id: client.id, project_reference: ref, status: 'Closed Won' })
       .eq('id', c.id)
 
-    // Welcome email to the new client + internal notification (best-effort).
-    await sendEmail('welcome', {
+    // Welcome email + internal notification — fire-and-forget so the conversion
+    // never blocks or fails on email.
+    sendEmail('welcome', {
       email: c.email,
       contactName: c.name,
       companyName: c.business || c.name,
@@ -268,6 +269,8 @@ function Dashboard({ session }) {
       projectType: c.project_type,
       budget: c.budget,
       projectReference: ref,
+    }).then((ok) => {
+      if (!ok) console.error('[welcome] email did not send (conversion still completed)')
     })
 
     // Reflect locally without a full reload jank.

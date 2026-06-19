@@ -112,14 +112,16 @@ export default function Support() {
       }
     }
 
-    // Confirmation to the client + notification to the support team (best-effort).
-    await sendEmail('support', {
+    // Fire-and-forget — the request is already saved; email must never block.
+    sendEmail('support', {
       name: form.name.trim(),
       company: form.company.trim() || null,
       email: form.email.trim(),
       projectReference: form.reference.trim() || null,
       supportType: form.type,
       message: form.message.trim(),
+    }).then((ok) => {
+      if (!ok) console.error('[support] confirmation email did not send (request still saved)')
     })
 
     setSubmitting(false)
