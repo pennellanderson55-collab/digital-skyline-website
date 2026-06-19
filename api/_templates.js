@@ -1,12 +1,19 @@
 // ============================================================================
 // Email templates + addressing for the Resend-backed /api/send-email function.
 // Server-side only. The leading underscore keeps Vercel from routing this file.
+//
+// INVARIANT: NO FormSubmit, ever. Every message here is branded Resend mail.
+// Client-facing messages are always `from` a business address (hello@/support@)
+// and `to` the client. Internal notifications are `to` a business inbox — the
+// client's email is NEVER used as the recipient of an owner notification.
 // ============================================================================
 
 // Role-based business addresses (overridable via env).
 const FROM = process.env.EMAIL_FROM || 'Digital Skyline Co. <hello@digitalskylineco.com>'
 const NOTIFY = process.env.EMAIL_NOTIFY || 'hello@digitalskylineco.com'
 const SUPPORT = process.env.EMAIL_SUPPORT || 'support@digitalskylineco.com'
+// Support mail goes out FROM the support address so replies thread correctly.
+const FROM_SUPPORT = process.env.EMAIL_FROM_SUPPORT || `Digital Skyline Co. <${SUPPORT}>`
 
 const BRAND = 'Digital Skyline Co.'
 const GOLD = '#d4af37'
@@ -137,7 +144,7 @@ export function buildEmail(type, data = {}) {
     case 'support': {
       const ref = data.projectReference || data.project_reference || '—'
       const messages = [{
-        from: FROM, to: SUPPORT,
+        from: FROM_SUPPORT, to: SUPPORT,
         subject: `New support request — ${data.supportType || data.support_type || 'General'}`,
         html: layout({
           heading: 'New support request',
@@ -151,7 +158,7 @@ export function buildEmail(type, data = {}) {
       }]
       if (data.email) {
         messages.push({
-          from: FROM, to: data.email, reply_to: SUPPORT,
+          from: FROM_SUPPORT, to: data.email, reply_to: SUPPORT,
           subject: 'We received your support request',
           html: layout({
             heading: 'Your support request was received',

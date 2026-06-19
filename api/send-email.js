@@ -33,6 +33,18 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: e.message })
   }
 
+  // INVARIANT: all mail is branded Resend mail FROM a verified business address
+  // (never FormSubmit, never a personal inbox). This guard makes that impossible
+  // to violate even if a template is edited later, and guarantees clients only
+  // ever receive email from the digitalskylineco.com domain.
+  const BUSINESS_DOMAIN = 'digitalskylineco.com'
+  const allValid = messages.length > 0 && messages.every(
+    (m) => typeof m.from === 'string' && m.from.includes(BUSINESS_DOMAIN) && typeof m.to === 'string' && m.to.includes('@')
+  )
+  if (!allValid) {
+    return res.status(500).json({ error: 'Refusing to send: every message must have a business From and a valid To.' })
+  }
+
   try {
     const results = await Promise.allSettled(
       messages.map((m) =>
