@@ -23,6 +23,7 @@ const SECTION_HREFS = {
 const ROUTE_HREFS = {
   'Client Portal': '/client-portal',
   'Pay Invoice': '/client-portal#payment',
+  Support: '/support',
 }
 
 const COLS = [
@@ -81,11 +82,8 @@ export default function Footer() {
                     )
                   }
                   const social = SOCIALS[l]
-                  // 'Support' routes to the contact section on the home page.
                   const href =
-                    l === 'Support'
-                      ? '/#consultation'
-                      : SECTION_HREFS[l] || (l.includes('@') ? `mailto:${l}` : social || '#')
+                    SECTION_HREFS[l] || (l.includes('@') ? `mailto:${l}` : social || '#')
                   const external = Boolean(social)
                   return (
                     <li key={l}>

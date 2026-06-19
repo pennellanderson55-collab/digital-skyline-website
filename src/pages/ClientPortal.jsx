@@ -1,34 +1,11 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import AmbientCanvas from '../components/AmbientCanvas.jsx'
 import CustomCursor from '../components/CustomCursor.jsx'
 import Navbar from '../components/Navbar.jsx'
 import Footer from '../components/Footer.jsx'
 import usePageMeta from '../lib/usePageMeta.js'
-import { Activity, Shield, User, Chart, Arrow, Lock } from '../components/Icons.jsx'
-
-const FEATURES = [
-  {
-    icon: Activity,
-    title: 'Project Status',
-    desc: 'Track where your project is in our development process.',
-  },
-  {
-    icon: Shield,
-    title: 'Secure Payments',
-    desc: 'Submit invoice payments securely through Stripe.',
-  },
-  {
-    icon: User,
-    title: 'Support Requests',
-    desc: 'Contact our team regarding updates, revisions, and support.',
-  },
-  {
-    icon: Chart,
-    title: 'Future Dashboard',
-    desc: 'Coming soon: project tracking, invoices, files, and communication in one place.',
-    soon: true,
-  },
-]
+import { Shield, User, Cube, Arrow, Lock } from '../components/Icons.jsx'
 
 const EMPTY_FORM = {
   clientName: '',
@@ -42,7 +19,7 @@ export default function ClientPortal() {
   usePageMeta({
     title: 'Client Portal | Digital Skyline Co.',
     description:
-      'Manage your project, access resources, and securely submit invoice payments through the Digital Skyline Co. client portal.',
+      'Access project support, submit payments securely through Stripe, and manage your Digital Skyline Co. project in one place.',
   })
 
   const [form, setForm] = useState(EMPTY_FORM)
@@ -69,7 +46,8 @@ export default function ClientPortal() {
     const errs = {}
     if (!form.clientName.trim()) errs.clientName = 'Please enter your name'
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Enter a valid email'
-    if (!form.invoiceNumber.trim()) errs.invoiceNumber = 'Please enter your invoice number'
+    if (!form.invoiceNumber.trim())
+      errs.invoiceNumber = 'Please enter your project reference or invoice number.'
     const amount = Number(form.amount)
     if (!form.amount || Number.isNaN(amount) || amount <= 0)
       errs.amount = 'Enter a valid payment amount'
@@ -87,7 +65,7 @@ export default function ClientPortal() {
     const payload = {
       clientName: form.clientName.trim(),
       companyName: form.companyName.trim() || null,
-      invoiceNumber: form.invoiceNumber.trim(),
+      projectReference: form.invoiceNumber.trim(),
       email: form.email.trim(),
       amount: Number(form.amount),
     }
@@ -98,7 +76,7 @@ export default function ClientPortal() {
     // Option A — Stripe Payment Link (no backend required):
     //   1. Create a Payment Link in the Stripe Dashboard.
     //   2. Set VITE_STRIPE_PAYMENT_LINK in your env to that URL.
-    //   The client's email + invoice are forwarded as prefill / reference values.
+    //   The client's email + project reference are forwarded as prefill / ref.
     //
     // Option B — Stripe Checkout Session (recommended for invoice amounts):
     //   Add a serverless endpoint (e.g. Vercel /api/create-checkout-session)
@@ -115,7 +93,7 @@ export default function ClientPortal() {
     if (paymentLink) {
       const url = new URL(paymentLink)
       url.searchParams.set('prefilled_email', payload.email)
-      url.searchParams.set('client_reference_id', payload.invoiceNumber)
+      url.searchParams.set('client_reference_id', payload.projectReference)
       window.location.href = url.toString()
       return
     }
@@ -135,7 +113,7 @@ export default function ClientPortal() {
 
       <main className="font-sans">
         {/* ── Hero ─────────────────────────────────────────────── */}
-        <section className="relative scroll-mt-24 pt-36 pb-20">
+        <section className="relative scroll-mt-24 pt-36 pb-16">
           <div className="pointer-events-none absolute inset-0 -z-10">
             <div className="absolute left-1/2 top-24 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-gold-400/[0.08] blur-[120px] animate-float-slow" />
             <div className="absolute inset-0 bg-radial-gold opacity-60" />
@@ -157,7 +135,8 @@ export default function ClientPortal() {
               className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-gray-400 ds-reveal"
               style={{ animationDelay: '0.16s' }}
             >
-              Manage your project, access resources, and securely submit payments.
+              Access project support, submit payments, and manage important
+              project actions in one place.
             </p>
 
             <div
@@ -167,49 +146,63 @@ export default function ClientPortal() {
               <a href="#payment" className="btn-gold w-full sm:w-auto">
                 Make a Payment <Arrow className="h-5 w-5" />
               </a>
-              <a href="/#consultation" className="btn-ghost w-full sm:w-auto">
+              <Link to="/support" className="btn-ghost w-full sm:w-auto">
                 Contact Support
-              </a>
+              </Link>
             </div>
           </div>
         </section>
 
-        {/* ── Feature cards ────────────────────────────────────── */}
-        <section className="relative py-12">
+        {/* ── Quick actions ────────────────────────────────────── */}
+        <section className="relative py-10">
           <div className="container-max">
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {FEATURES.map((f, i) => {
-                const Icon = f.icon
-                return (
-                  <article
-                    key={f.title}
-                    className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 transition-all duration-300 hover:-translate-y-1 hover:border-gold-400/30 ds-reveal"
-                    style={{ animationDelay: `${0.1 + i * 0.08}s` }}
-                  >
-                    <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-gold-400/10 blur-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                    <div className="relative flex h-12 w-12 items-center justify-center rounded-xl border border-gold-400/30 bg-gold-400/[0.07] text-gold-300 transition-transform duration-300 group-hover:scale-110">
-                      <Icon className="h-6 w-6" />
-                    </div>
-                    <h3 className="relative mt-5 flex items-center gap-2 font-display text-lg font-semibold text-gray-50">
-                      {f.title}
-                      {f.soon && (
-                        <span className="rounded-full border border-gold-400/30 bg-gold-400/[0.08] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-200">
-                          Soon
-                        </span>
-                      )}
-                    </h3>
-                    <p className="relative mt-2 text-sm leading-relaxed text-gray-400">
-                      {f.desc}
-                    </p>
-                  </article>
-                )
-              })}
+            <div className="grid gap-5 sm:grid-cols-3">
+              {/* 1 — Make a Payment */}
+              <ActionCard
+                icon={Shield}
+                title="Make a Payment"
+                desc="Submit a project payment securely through Stripe."
+                delay={0.1}
+              >
+                <a href="#payment" className="btn-gold w-full text-sm">
+                  Go to Payment <Arrow className="h-4 w-4" />
+                </a>
+              </ActionCard>
+
+              {/* 2 — Request Support */}
+              <ActionCard
+                icon={User}
+                title="Request Support"
+                desc="Need help with updates, revisions, or technical issues?"
+                delay={0.18}
+              >
+                <Link to="/support" className="btn-ghost w-full text-sm">
+                  Open Support <Arrow className="h-4 w-4" />
+                </Link>
+              </ActionCard>
+
+              {/* 3 — Project Resources (coming soon) */}
+              <ActionCard
+                icon={Cube}
+                title="Project Resources"
+                desc="Coming soon: access project documents, files, timelines, and handoff resources."
+                soon
+                delay={0.26}
+              >
+                <button
+                  type="button"
+                  disabled
+                  className="btn-ghost w-full cursor-not-allowed text-sm opacity-50"
+                >
+                  Coming Soon
+                </button>
+              </ActionCard>
             </div>
           </div>
         </section>
 
         {/* ── Payment portal ───────────────────────────────────── */}
-        <section id="payment" className="relative scroll-mt-24 py-20">
+        <section id="payment" className="relative scroll-mt-24 py-16">
           <div
             className="pointer-events-none absolute left-1/2 top-10 h-72 w-[40rem] -translate-x-1/2 rounded-full bg-gold-400/[0.07] blur-[130px]"
             aria-hidden="true"
@@ -251,25 +244,24 @@ export default function ClientPortal() {
                     />
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field
-                      label="Invoice Number"
-                      required
-                      value={form.invoiceNumber}
-                      onChange={update('invoiceNumber')}
-                      placeholder="DS-1024"
-                      error={errors.invoiceNumber}
-                    />
-                    <Field
-                      label="Email Address"
-                      type="email"
-                      required
-                      value={form.email}
-                      onChange={update('email')}
-                      placeholder="ada@company.com"
-                      error={errors.email}
-                    />
-                  </div>
+                  <Field
+                    label="Project Reference / Invoice Number"
+                    required
+                    value={form.invoiceNumber}
+                    onChange={update('invoiceNumber')}
+                    placeholder="DS-CLIENT-001 or INV-0001"
+                    error={errors.invoiceNumber}
+                  />
+
+                  <Field
+                    label="Email Address"
+                    type="email"
+                    required
+                    value={form.email}
+                    onChange={update('email')}
+                    placeholder="ada@company.com"
+                    error={errors.email}
+                  />
 
                   {/* Payment amount with $ prefix */}
                   <div>
@@ -352,6 +344,30 @@ export default function ClientPortal() {
         }
       `}</style>
     </div>
+  )
+}
+
+function ActionCard({ icon: Icon, title, desc, soon, delay = 0, children }) {
+  return (
+    <article
+      className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 transition-all duration-300 hover:-translate-y-1 hover:border-gold-400/30 ds-reveal"
+      style={{ animationDelay: `${delay}s` }}
+    >
+      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-gold-400/10 blur-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      <div className="relative flex h-12 w-12 items-center justify-center rounded-xl border border-gold-400/30 bg-gold-400/[0.07] text-gold-300 transition-transform duration-300 group-hover:scale-110">
+        <Icon className="h-6 w-6" />
+      </div>
+      <h3 className="relative mt-5 flex items-center gap-2 font-display text-lg font-semibold text-gray-50">
+        {title}
+        {soon && (
+          <span className="rounded-full border border-gold-400/30 bg-gold-400/[0.08] px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-gold-200">
+            Soon
+          </span>
+        )}
+      </h3>
+      <p className="relative mt-2 text-sm leading-relaxed text-gray-400">{desc}</p>
+      <div className="relative mt-6 pt-1">{children}</div>
+    </article>
   )
 }
 
