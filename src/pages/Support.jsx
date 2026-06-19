@@ -5,12 +5,9 @@ import Navbar from '../components/Navbar.jsx'
 import Footer from '../components/Footer.jsx'
 import usePageMeta from '../lib/usePageMeta.js'
 import { supabase } from '../lib/supabase.js'
+import { sendEmail } from '../lib/email.js'
+import { SUPPORT_EMAIL } from '../lib/contact.js'
 import { Activity, Lock, Code, Sparkle, Arrow, Check } from '../components/Icons.jsx'
-
-// Where support requests are sent. FormSubmit.co relays to this inbox without a
-// backend (the same approach used by the consultation form). A mailto fallback
-// is offered if the network request fails.
-const SUPPORT_EMAIL = 'pennellanderson55@gmail.com'
 
 const CARDS = [
   {
@@ -111,29 +108,19 @@ export default function Support() {
           message: form.message.trim(),
         })
       } catch {
-        /* request storage is best-effort — FormSubmit + mailto still cover it */
+        /* request storage is best-effort — the email + mailto fallback still cover it */
       }
     }
 
-    // Best-effort delivery via FormSubmit (no backend needed). Whether or not
-    // this succeeds we still show the confirmation, with a mailto fallback link.
-    try {
-      await fetch(`https://formsubmit.co/ajax/${SUPPORT_EMAIL}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          _subject: `New Support Request — ${form.type}`,
-          Name: form.name.trim(),
-          Company: form.company.trim() || '—',
-          Email: form.email.trim(),
-          'Project Reference / Invoice Number': form.reference.trim() || '—',
-          'Support Type': form.type,
-          Message: form.message.trim(),
-        }),
-      })
-    } catch {
-      /* email is best-effort — the confirmation + mailto fallback cover this */
-    }
+    // Confirmation to the client + notification to the support team (best-effort).
+    await sendEmail('support', {
+      name: form.name.trim(),
+      company: form.company.trim() || null,
+      email: form.email.trim(),
+      projectReference: form.reference.trim() || null,
+      supportType: form.type,
+      message: form.message.trim(),
+    })
 
     setSubmitting(false)
     setSubmitted(true)

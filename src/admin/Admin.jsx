@@ -6,6 +6,7 @@ import Projects from './Projects.jsx'
 import Support, { SupportModal } from './Support.jsx'
 import ProjectProfile from './ProjectProfile.jsx'
 import { INITIAL_PROJECT_STAGE, balanceDue, fmtMoney, fmtDateTime } from './ops.js'
+import { sendEmail } from '../lib/email.js'
 
 const STATUSES = [
   'New', 'Contacted', 'Consultation Scheduled',
@@ -257,6 +258,14 @@ function Dashboard({ session }) {
     await supabase.from('consultations')
       .update({ converted: true, client_id: client.id, project_reference: ref, status: 'Closed Won' })
       .eq('id', c.id)
+
+    // Welcome email to the new client + internal notification (best-effort).
+    await sendEmail('welcome', {
+      email: c.email,
+      contactName: c.name,
+      companyName: c.business || c.name,
+      projectReference: ref,
+    })
 
     // Reflect locally without a full reload jank.
     setProjects((ps) => [project, ...ps])

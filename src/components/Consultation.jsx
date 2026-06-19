@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Check, Arrow, Sparkle } from './Icons.jsx'
 import { supabase } from '../lib/supabase.js'
+import { sendEmail } from '../lib/email.js'
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -66,10 +68,10 @@ export default function Consultation() {
   const [time, setTime] = useState(null)
   const [bookedTimes, setBookedTimes] = useState([])
   const [loadingTimes, setLoadingTimes] = useState(false)
+  const navigate = useNavigate()
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
 
   const update = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const clearErr = (k) => setErrors((e) => ({ ...e, [k]: undefined }))
@@ -212,37 +214,14 @@ export default function Consultation() {
       return
     }
 
-    // Best-effort owner notification — never blocks the booking.
-    try {
-      await fetch('https://formsubmit.co/ajax/pennellanderson55@gmail.com', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          _subject: 'New Digital Skyline Consultation Request',
-          ...row,
-          current_systems: row.current_systems.join(', '),
-        }),
-      })
-    } catch { /* email is optional */ }
+    // Confirmation to the client + notification to the team (best-effort).
+    await sendEmail('consultation', row)
 
     setSubmitting(false)
-    setSubmitted(true)
-  }
-
-  const reset = () => {
-    setSubmitted(false)
-    setSelected(null)
-    setTime(null)
-    setBookedTimes([])
-    setForm(EMPTY_FORM)
-    setErrors({})
-  }
-
-  const prettyDate =
-    selected &&
-    selected.toLocaleDateString('en-US', {
-      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+    navigate('/consultation-confirmed', {
+      state: { name: row.name, business: row.business, date: row.date, time: row.time },
     })
+  }
 
   return (
     <section id="consultation" className="relative scroll-mt-24 py-24">
@@ -299,29 +278,7 @@ export default function Consultation() {
           <div className="card-surface relative overflow-hidden p-6 shadow-card sm:p-8">
             <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-gold-400/10 blur-3xl" />
 
-            {submitted ? (
-              <div className="relative flex min-h-[520px] flex-col items-center justify-center text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gold-gradient text-ink-950 shadow-gold-soft">
-                  <Check className="h-8 w-8" />
-                </div>
-                <h3 className="mt-6 font-display text-2xl font-bold text-gray-50">
-                  Request received
-                </h3>
-                <p className="mt-3 max-w-sm text-gray-400">
-                  Your consultation request has been received. We'll contact you
-                  shortly to confirm your time.
-                </p>
-                {selected && time && (
-                  <p className="mt-4 rounded-xl border border-gold-400/25 bg-gold-400/[0.06] px-4 py-2 font-mono text-xs text-gold-100">
-                    {prettyDate} · {time}
-                  </p>
-                )}
-                <button onClick={reset} className="btn-ghost mt-8 text-sm">
-                  Book another
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={onSubmit} className="relative" noValidate>
+            <form onSubmit={onSubmit} className="relative" noValidate>
                 {/* calendar */}
                 <div className="rounded-2xl border border-white/10 bg-ink-950/50 p-4">
                   <div className="flex items-center justify-between">
@@ -515,7 +472,6 @@ export default function Consultation() {
                   No charge · We respect your inbox, no spam ever.
                 </p>
               </form>
-            )}
           </div>
         </div>
       </div>

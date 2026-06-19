@@ -72,10 +72,10 @@ export default function Status() {
           <p className="text-xs text-gray-400 leading-relaxed">
             For urgent issues, contact{' '}
             <a
-              href="mailto:digitalskyline@digitalskylineco.com"
+              href="mailto:hello@digitalskylineco.com"
               className="text-gold-300 hover:text-gold-200 transition-colors"
             >
-              digitalskyline@digitalskylineco.com
+              hello@digitalskylineco.com
             </a>
             .
           </p>

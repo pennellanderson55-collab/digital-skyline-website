@@ -84,10 +84,10 @@ export default function Privacy() {
           <p className="text-gray-400 text-sm leading-7">
             For any questions about this Privacy Policy, please contact us at{' '}
             <a
-              href="mailto:digitalskyline@digitalskylineco.com"
+              href="mailto:hello@digitalskylineco.com"
               className="text-gold-300 hover:text-gold-200 transition-colors"
             >
-              digitalskyline@digitalskylineco.com
+              hello@digitalskylineco.com
             </a>
             .
           </p>

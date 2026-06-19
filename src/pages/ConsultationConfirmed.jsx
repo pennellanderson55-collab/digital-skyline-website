@@ -1,6 +1,13 @@
 import { useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import usePageMeta from '../lib/usePageMeta.js'
+
+const prettyDate = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso.length <= 10 ? `${iso}T00:00:00` : iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+}
 
 const NEXT_STEPS = [
   'We review your business needs',
@@ -10,6 +17,9 @@ const NEXT_STEPS = [
 ]
 
 export default function ConsultationConfirmed() {
+  const { state } = useLocation()
+  const booking = state || null
+
   usePageMeta({
     title: 'Consultation Confirmed | Digital Skyline Co.',
     description:
@@ -93,6 +103,38 @@ export default function ConsultationConfirmed() {
           websites, applications, dashboards, and AI-powered solutions can help
           grow your business.
         </p>
+
+        {/* Booking details (passed from the booking form) */}
+        {booking && (booking.date || booking.business) && (
+          <div className="card-surface mx-auto mt-10 max-w-md p-6 text-left">
+            <h2 className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-gold-300">
+              Your Booking
+            </h2>
+            <dl className="mt-4 space-y-2.5 text-sm">
+              {booking.business && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-gray-500">Business</dt>
+                  <dd className="font-medium text-gray-100">{booking.business}</dd>
+                </div>
+              )}
+              {booking.date && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-gray-500">Date</dt>
+                  <dd className="font-medium text-gray-100">{prettyDate(booking.date)}</dd>
+                </div>
+              )}
+              {booking.time && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-gray-500">Time</dt>
+                  <dd className="font-medium text-gray-100">{booking.time}</dd>
+                </div>
+              )}
+            </dl>
+            <p className="mt-4 border-t border-white/[0.06] pt-3 font-mono text-[11px] text-gray-500">
+              A confirmation email is on its way to your inbox.
+            </p>
+          </div>
+        )}
 
         {/* What Happens Next */}
         <div className="card-surface mx-auto mt-10 max-w-md p-7 text-left">
