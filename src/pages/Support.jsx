@@ -133,9 +133,11 @@ export default function Support() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-x-clip bg-ink-950">
-      <AmbientCanvas />
-      <CustomCursor />
+    <div className={`relative min-h-screen overflow-x-clip bg-ink-950 ${submitted ? 'confirm-scope' : ''}`}>
+      {/* On the success screen we drop the animated canvas + custom cursor so the
+          pointer stays smooth (see .confirm-scope in index.css). */}
+      {!submitted && <AmbientCanvas />}
+      {!submitted && <CustomCursor />}
       <Navbar />
 
       <main className="font-sans">

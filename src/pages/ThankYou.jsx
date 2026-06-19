@@ -29,7 +29,7 @@ export default function ThankYou() {
   }, [])
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-ink-950 px-6 py-20 text-gray-200 font-sans">
+    <main className="confirm-scope relative flex min-h-screen items-center justify-center overflow-hidden bg-ink-950 px-6 py-20 text-gray-200 font-sans">
       {/* Subtle animated background glow */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute left-1/2 top-1/3 h-[42rem] w-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold-400/[0.08] blur-[120px] animate-float-slow" />

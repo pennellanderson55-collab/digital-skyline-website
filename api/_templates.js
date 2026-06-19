@@ -3,17 +3,24 @@
 // Server-side only. The leading underscore keeps Vercel from routing this file.
 //
 // INVARIANT: NO FormSubmit, ever. Every message here is branded Resend mail.
-// Client-facing messages are always `from` a business address (hello@/support@)
-// and `to` the client. Internal notifications are `to` a business inbox — the
-// client's email is NEVER used as the recipient of an owner notification.
+//
+// Routing:
+//   • Client confirmations  → the customer's email, FROM a business address
+//     (hello@ for consultation/welcome, support@ for support). Simple + branded.
+//   • Internal notifications → OWNER_EMAIL with the FULL submission details and
+//     a subject like "New Consultation Request - <Name>". The client's email is
+//     NEVER used as the recipient of an internal notification.
 // ============================================================================
 
-// Role-based business addresses (overridable via env).
-const FROM = process.env.EMAIL_FROM || 'Digital Skyline Co. <hello@digitalskylineco.com>'
-const NOTIFY = process.env.EMAIL_NOTIFY || 'hello@digitalskylineco.com'
-const SUPPORT = process.env.EMAIL_SUPPORT || 'support@digitalskylineco.com'
-// Support mail goes out FROM the support address so replies thread correctly.
-const FROM_SUPPORT = process.env.EMAIL_FROM_SUPPORT || `Digital Skyline Co. <${SUPPORT}>`
+// --- Constants (overridable via env) ---------------------------------------
+const OWNER_EMAIL = process.env.OWNER_EMAIL || 'pennellanderson55@gmail.com'
+const HELLO_EMAIL = process.env.HELLO_EMAIL || 'hello@digitalskylineco.com'
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || 'support@digitalskylineco.com'
+
+// Sender identities (must be on a Resend-verified business domain).
+const FROM_HELLO = process.env.EMAIL_FROM || `Digital Skyline Co. <${HELLO_EMAIL}>`
+const FROM_SUPPORT = process.env.EMAIL_FROM_SUPPORT || `Digital Skyline Co. <${SUPPORT_EMAIL}>`
+const ADMIN_URL = process.env.ADMIN_URL || 'https://digitalskylineco.com/admin'
 
 const BRAND = 'Digital Skyline Co.'
 const GOLD = '#d4af37'
@@ -31,14 +38,25 @@ const prettyDate = (iso) => {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 }
 
+// Combine a select value with its free-text "Other" companion, if present.
+const withOther = (value, other) =>
+  value === 'Other' && other ? `Other — ${other}` : (value || '')
+
+// Drop empty rows so internal emails stay clean.
+const compact = (rows) => rows.filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '')
+
+const adminLinkBlock = `<div style="margin-top:18px">
+  <a href="${ADMIN_URL}" style="display:inline-block;background:${GOLD};color:${INK};text-decoration:none;font-weight:700;font-size:13px;padding:10px 16px;border-radius:8px">Open the admin dashboard →</a>
+</div>`
+
 // Shared premium black/gold shell.
 function layout({ heading, intro, rows = [], body = '', footnote = '' }) {
   const rowsHtml = rows.length
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 4px">
         ${rows.map(([k, v]) => `
           <tr>
-            <td style="padding:8px 0;border-bottom:1px solid #1d1d22;color:#9aa0aa;font-size:13px;width:42%">${esc(k)}</td>
-            <td style="padding:8px 0;border-bottom:1px solid #1d1d22;color:#f5f5f7;font-size:14px;font-weight:600">${esc(v)}</td>
+            <td style="padding:8px 0;border-bottom:1px solid #1d1d22;color:#9aa0aa;font-size:13px;width:42%;vertical-align:top">${esc(k)}</td>
+            <td style="padding:8px 0;border-bottom:1px solid #1d1d22;color:#f5f5f7;font-size:14px;font-weight:600;white-space:pre-wrap">${esc(v)}</td>
           </tr>`).join('')}
       </table>`
     : ''
@@ -65,37 +83,52 @@ function layout({ heading, intro, rows = [], body = '', footnote = '' }) {
 }
 
 /**
- * Returns an array of Resend message objects for the given trigger.
- * Each trigger produces a client-facing email + an internal notification.
+ * Returns an array of Resend message objects for the given trigger:
+ * one full internal notification (to OWNER_EMAIL) + one simple client
+ * confirmation (to the customer), when a client email is present.
  */
 export function buildEmail(type, data = {}) {
   switch (type) {
     case 'consultation': {
-      const when = `${prettyDate(data.date)}${data.time ? ` at ${esc(data.time)}` : ''}`
+      const name = data.name || data.email || 'Lead'
+      // Internal — full submission details to the owner.
       const messages = [{
-        from: FROM, to: NOTIFY,
-        subject: `New consultation booked — ${data.name || data.email || 'Lead'}`,
+        from: FROM_HELLO, to: OWNER_EMAIL,
+        subject: `New Consultation Request - ${name}`,
         html: layout({
-          heading: 'New consultation booked',
-          intro: 'A new consultation has been scheduled through the website.',
-          rows: [
-            ['Name', data.name], ['Business', data.business], ['Email', data.email],
-            ['Phone', data.phone || '—'], ['Date', prettyDate(data.date)], ['Time', data.time],
-            ['Budget', data.budget || '—'], ['Project type', data.project_type || '—'],
-          ],
+          heading: 'New Consultation Request',
+          intro: 'A new consultation was booked through the website.',
+          rows: compact([
+            ['Client name', data.name],
+            ['Email', data.email],
+            ['Phone', data.phone],
+            ['Business / company', data.business],
+            ['Project type', data.project_type],
+            ['Budget', data.budget],
+            ['Lead source', withOther(data.heard_about, data.heard_about_other)],
+            ['Challenge', withOther(data.challenge, data.challenge_other)],
+            ['Success outcome', data.success_outcome],
+            ['Current systems', Array.isArray(data.current_systems) ? data.current_systems.join(', ') : data.current_systems],
+            ['Requested date', prettyDate(data.date)],
+            ['Requested time', data.time],
+            ['Notes', data.notes],
+          ]),
+          body: adminLinkBlock,
         }),
       }]
+      // Client — simple branded confirmation.
       if (data.email) {
         messages.push({
-          from: FROM, to: data.email, reply_to: NOTIFY,
+          from: FROM_HELLO, to: data.email, reply_to: HELLO_EMAIL,
           subject: 'Your Digital Skyline consultation is confirmed',
           html: layout({
             heading: 'Your consultation is confirmed',
             intro: `Thank you${data.name ? `, ${esc(data.name)}` : ''}! Your consultation with ${BRAND} is booked. Here are the details:`,
-            rows: [
-              ['Date', prettyDate(data.date)], ['Time', data.time],
-              ['Business', data.business || '—'],
-            ],
+            rows: compact([
+              ['Date', prettyDate(data.date)],
+              ['Time', data.time],
+              ['Business', data.business],
+            ]),
             body: `<div style="margin-top:18px;color:#c7ccd4;font-size:14px;line-height:1.7">
               <strong style="color:#fff">What happens next</strong>
               <ol style="margin:8px 0 0;padding-left:18px">
@@ -112,24 +145,35 @@ export function buildEmail(type, data = {}) {
     }
 
     case 'welcome': {
-      const ref = data.projectReference || data.project_reference
+      const ref = data.projectReference || data.project_reference || ''
+      // Internal — conversion details to the owner.
       const messages = [{
-        from: FROM, to: NOTIFY,
-        subject: `Client converted — ${ref || ''}`,
+        from: FROM_HELLO, to: OWNER_EMAIL,
+        subject: `Lead Converted To Client - ${ref}`,
         html: layout({
-          heading: 'New client created',
+          heading: 'Lead Converted To Client',
           intro: 'A consultation was converted into a client + project.',
-          rows: [['Project reference', ref], ['Company', data.companyName], ['Contact', data.contactName], ['Email', data.email]],
+          rows: compact([
+            ['Project reference', ref],
+            ['Company', data.companyName],
+            ['Contact name', data.contactName],
+            ['Email', data.email],
+            ['Phone', data.phone],
+            ['Project type', data.projectType],
+            ['Budget', data.budget],
+          ]),
+          body: adminLinkBlock,
         }),
       }]
+      // Client — welcome + project reference explanation.
       if (data.email) {
         messages.push({
-          from: FROM, to: data.email, reply_to: NOTIFY,
+          from: FROM_HELLO, to: data.email, reply_to: HELLO_EMAIL,
           subject: `Welcome to ${BRAND} — ${ref || 'your project'}`,
           html: layout({
             heading: `Welcome aboard${data.contactName ? `, ${esc(data.contactName)}` : ''}!`,
             intro: `We're excited to start your project with ${BRAND}. Your project has been set up and assigned a reference number.`,
-            rows: [['Your project reference', ref]],
+            rows: compact([['Your project reference', ref]]),
             body: `<div style="margin-top:18px;color:#c7ccd4;font-size:14px;line-height:1.7">
               <strong style="color:#fff">How your project reference works</strong>
               <p style="margin:8px 0 0">Your reference <strong style="color:${GOLD}">${esc(ref)}</strong> is the master ID for everything related to your project — payments, invoices, support requests, files, and timeline all connect to it.</p>
@@ -142,28 +186,35 @@ export function buildEmail(type, data = {}) {
     }
 
     case 'support': {
+      const name = data.name || data.email || 'Client'
       const ref = data.projectReference || data.project_reference || '—'
+      const supportType = data.supportType || data.support_type || 'General Support'
+      // Internal — full request to the owner.
       const messages = [{
-        from: FROM_SUPPORT, to: SUPPORT,
-        subject: `New support request — ${data.supportType || data.support_type || 'General'}`,
+        from: FROM_SUPPORT, to: OWNER_EMAIL,
+        subject: `New Support Request - ${name}`,
         html: layout({
-          heading: 'New support request',
+          heading: 'New Support Request',
           intro: 'A support request was submitted from the website.',
-          rows: [
-            ['Project reference', ref], ['Name', data.name], ['Company', data.company || '—'],
-            ['Email', data.email], ['Type', data.supportType || data.support_type],
-          ],
-          body: `<div style="margin-top:14px;color:#c7ccd4;font-size:14px;line-height:1.7"><strong style="color:#fff">Message</strong><p style="margin:6px 0 0;white-space:pre-wrap">${esc(data.message)}</p></div>`,
+          rows: compact([
+            ['Project reference', ref],
+            ['Client name', data.name],
+            ['Email', data.email],
+            ['Company', data.company],
+            ['Support type', supportType],
+          ]),
+          body: `<div style="margin-top:14px;color:#c7ccd4;font-size:14px;line-height:1.7"><strong style="color:#fff">Message</strong><p style="margin:6px 0 0;white-space:pre-wrap">${esc(data.message)}</p></div>${adminLinkBlock}`,
         }),
       }]
+      // Client — simple branded confirmation.
       if (data.email) {
         messages.push({
-          from: FROM_SUPPORT, to: data.email, reply_to: SUPPORT,
+          from: FROM_SUPPORT, to: data.email, reply_to: SUPPORT_EMAIL,
           subject: 'We received your support request',
           html: layout({
             heading: 'Your support request was received',
             intro: `Thanks${data.name ? `, ${esc(data.name)}` : ''} — our team has your request and will follow up by email as soon as possible.`,
-            rows: [['Project reference', ref], ['Support type', data.supportType || data.support_type || '—']],
+            rows: compact([['Project reference', ref], ['Support type', supportType]]),
             footnote: 'Please keep this email for your records. Replying to it reaches our support team directly.',
           }),
         })

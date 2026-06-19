@@ -264,6 +264,9 @@ function Dashboard({ session }) {
       email: c.email,
       contactName: c.name,
       companyName: c.business || c.name,
+      phone: c.phone,
+      projectType: c.project_type,
+      budget: c.budget,
       projectReference: ref,
     })
 

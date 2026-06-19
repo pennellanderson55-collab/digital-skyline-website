@@ -309,6 +309,38 @@
 .admin-scope [draggable='true'] { cursor: grab !important; }
 .admin-scope [draggable='true']:active { cursor: grabbing !important; }
 
+/* ============================================================
+ * Confirmation / success screens — keep the cursor buttery smooth.
+ * These screens drop the custom JS cursor (which reflows every frame via
+ * getBoundingClientRect for magnetic pull) and any LOOPING background effects
+ * (animated beams/orbs/sheen/glow/pulse). Nothing repaints per-frame, so the
+ * pointer stays responsive. One-shot entrance animations are preserved.
+ * Applied via the .confirm-scope class on the page/success container.
+ * ============================================================ */
+.confirm-scope,
+.confirm-scope * { cursor: auto !important; }
+.confirm-scope a,
+.confirm-scope button,
+.confirm-scope label,
+.confirm-scope select { cursor: pointer !important; }
+.confirm-scope input,
+.confirm-scope textarea { cursor: text !important; }
+
+/* Hide the custom cursor if it happens to be mounted on the same page */
+.confirm-scope .cursor-dot,
+.confirm-scope .cursor-ring { display: none !important; }
+
+/* Stop continuous compositing: disable the looping animations + button sheen */
+.confirm-scope .animate-float,
+.confirm-scope .animate-float-slow,
+.confirm-scope .animate-pulse-ring,
+.confirm-scope .animate-core-glow,
+.confirm-scope .animate-core-pulse,
+.confirm-scope .animate-sheen,
+.confirm-scope .animate-spin-slow,
+.confirm-scope .animate-grid-drift { animation: none !important; }
+.confirm-scope .btn-gold::after { display: none !important; }
+
 /* ── Lenis smooth scroll (required base styles) ─────────── */
 html.lenis,
 html.lenis body { height: auto; }
