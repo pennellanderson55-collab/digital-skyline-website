@@ -265,6 +265,38 @@ function Dashboard({ session }) {
     return ref
   }
 
+  // Revert an accidental/test conversion: delete the generated client + project
+  // (project delete cascades its stage history) and return the ORIGINAL
+  // consultation to the leads workflow with all its data preserved.
+  const revertToLead = async (project) => {
+    const clientId = project.client_id
+    const consultationId = project.client?.consultation_id
+
+    if (consultationId) {
+      const { error } = await supabase.from('consultations')
+        .update({ converted: false, client_id: null, project_reference: null, status: 'New' })
+        .eq('id', consultationId)
+      if (error) throw new Error(error.message)
+    }
+
+    const { error: pErr } = await supabase.from('projects').delete().eq('id', project.id)
+    if (pErr) throw new Error(pErr.message)
+
+    if (clientId) {
+      const { error: cErr } = await supabase.from('clients').delete().eq('id', clientId)
+      if (cErr) throw new Error(cErr.message)
+    }
+
+    // Reflect locally.
+    setProjects((ps) => ps.filter((p) => p.id !== project.id))
+    setHistory((h) => h.filter((x) => x.project_id !== project.id))
+    if (consultationId) {
+      setRows((rs) => rs.map((r) => (r.id === consultationId
+        ? { ...r, converted: false, client_id: null, project_reference: null, status: 'New' } : r)))
+    }
+    setActiveProject(null)
+  }
+
   const openTab = (t) => { setTab(t); setActiveProject(null) }
 
   return (
@@ -313,6 +345,7 @@ function Dashboard({ session }) {
             onSaveProject={(patch) => updateProject(activeProject.id, patch)}
             onSaveClient={(patch) => updateClient(activeProject.client_id, patch)}
             onStageChange={(stage) => changeStage(activeProject, stage)}
+            onRevert={() => revertToLead(activeProject)}
           />
         ) : (
           <>

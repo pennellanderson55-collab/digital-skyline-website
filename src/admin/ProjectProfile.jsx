@@ -11,13 +11,16 @@ import {
  * (back button) rather than a modal. The Project Reference is shown as the
  * master identifier connecting every section below.
  */
-export default function ProjectProfile({ project, history = [], onClose, onSaveProject, onSaveClient, onStageChange }) {
+export default function ProjectProfile({ project, history = [], onClose, onSaveProject, onSaveClient, onStageChange, onRevert }) {
   const client = project.client || {}
 
   const [clientForm, setClientForm] = useState(pickClient(client))
   const [projForm, setProjForm] = useState(pickProject(project))
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [confirmRevert, setConfirmRevert] = useState(false)
+  const [reverting, setReverting] = useState(false)
+  const [revertError, setRevertError] = useState('')
 
   // Re-initialise only when a *different* project is opened — not on every
   // optimistic patch (which would discard unsaved edits mid-session).
@@ -50,6 +53,16 @@ export default function ProjectProfile({ project, history = [], onClose, onSaveP
     setSaved(true)
   }
 
+  const doRevert = async () => {
+    setReverting(true); setRevertError('')
+    try {
+      await onRevert()   // on success the parent unmounts this profile
+    } catch (e) {
+      setRevertError(e.message || 'Revert failed. Please try again.')
+      setReverting(false)
+    }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -57,10 +70,54 @@ export default function ProjectProfile({ project, history = [], onClose, onSaveP
         <button onClick={onClose} className="btn-ghost text-xs">
           <Arrow className="h-4 w-4 rotate-180" /> Back
         </button>
-        <button onClick={save} disabled={saving} className="btn-gold text-sm disabled:opacity-60">
-          {saving ? 'Saving…' : saved ? (<>Saved <Check className="h-4 w-4" /></>) : 'Save changes'}
-        </button>
+        <div className="flex items-center gap-2">
+          {onRevert && (
+            <button
+              onClick={() => { setRevertError(''); setConfirmRevert(true) }}
+              className="inline-flex items-center gap-2 rounded-full border border-rose-400/40 bg-rose-400/[0.06] px-5 py-2.5 text-xs font-medium text-rose-200 transition-colors hover:border-rose-400/70 hover:bg-rose-400/10"
+            >
+              Revert To Lead
+            </button>
+          )}
+          <button onClick={save} disabled={saving} className="btn-gold text-sm disabled:opacity-60">
+            {saving ? 'Saving…' : saved ? (<>Saved <Check className="h-4 w-4" /></>) : 'Save changes'}
+          </button>
+        </div>
       </div>
+
+      {/* Revert confirmation */}
+      {confirmRevert && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => !reverting && setConfirmRevert(false)}
+        >
+          <div className="card-surface relative w-full max-w-md p-7 shadow-card" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-xl font-bold text-gray-50">Revert to lead?</h3>
+            <p className="mt-3 text-sm text-gray-400">
+              This permanently deletes the client and project records for{' '}
+              <span className="font-mono text-gold-200">{project.project_reference}</span>, then returns the
+              original consultation to the Leads / Consultations workflow with its status set back to “New”.
+            </p>
+            <p className="mt-2 text-xs text-gray-500">
+              The original consultation and all of its data are preserved. Use this for accidental conversions
+              or testing — it cannot be undone.
+            </p>
+            {revertError && <p className="mt-3 text-xs text-rose-400">{revertError}</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => setConfirmRevert(false)} disabled={reverting} className="btn-ghost text-sm disabled:opacity-60">
+                Cancel
+              </button>
+              <button
+                onClick={doRevert}
+                disabled={reverting}
+                className="inline-flex items-center gap-2 rounded-full border border-rose-400/50 bg-rose-400/15 px-6 py-2.5 text-sm font-semibold text-rose-100 transition-colors hover:bg-rose-400/25 disabled:opacity-60"
+              >
+                {reverting ? 'Reverting…' : 'Revert To Lead'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
