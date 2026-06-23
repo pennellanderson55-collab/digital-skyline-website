@@ -13,7 +13,7 @@
 // ============================================================================
 
 // --- Constants (overridable via env) ---------------------------------------
-const OWNER_EMAIL = process.env.OWNER_EMAIL || 'pennellanderson55@gmail.com'
+const OWNER_EMAIL = process.env.OWNER_EMAIL || 'digitalskyline@digitalskylineco.com'
 const HELLO_EMAIL = process.env.HELLO_EMAIL || 'hello@digitalskylineco.com'
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || 'support@digitalskylineco.com'
 

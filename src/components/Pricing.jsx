@@ -4,6 +4,7 @@ import { Check, Arrow } from './Icons.jsx'
 const PLANS = [
   {
     name: 'Starter Website',
+    valuePrice: '$2,500',
     price: 'Starting at $750',
     cadence: 'per project',
     blurb: 'Perfect for small businesses that need a professional online presence.',
@@ -20,6 +21,7 @@ const PLANS = [
   },
   {
     name: 'Business Website',
+    valuePrice: '$5,000',
     price: 'Starting at $1,500',
     cadence: 'per project',
     blurb: 'Designed for growing businesses that need a more complete digital presence.',
@@ -37,6 +39,7 @@ const PLANS = [
   },
   {
     name: 'Custom Solutions',
+    valuePrice: '$8,000+',
     price: 'Custom Quote',
     cadence: 'project scope',
     blurb: 'For businesses that need applications, portals, dashboards, automations, or fully custom digital systems.',
@@ -89,13 +92,25 @@ export default function Pricing() {
               </h3>
               <p className="mt-2 min-h-[2.5rem] text-sm text-gray-400">{p.blurb}</p>
 
-              <div className="mt-5 flex items-baseline gap-2">
-                <span className="font-display text-4xl font-bold text-gold-gradient">
-                  {p.price}
-                </span>
-                <span className="font-mono text-xs uppercase tracking-wider text-gray-500">
-                  {p.cadence}
-                </span>
+              <div className="mt-5">
+                {p.valuePrice && (
+                  <div className="mb-1 flex items-baseline gap-2">
+                    <span className="font-display text-lg font-medium text-gold-200/40 line-through decoration-gold-400/40 decoration-[1.5px]">
+                      {p.valuePrice}
+                    </span>
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-gray-500">
+                      value
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display text-4xl font-bold text-gold-gradient">
+                    {p.price}
+                  </span>
+                  <span className="font-mono text-xs uppercase tracking-wider text-gray-500">
+                    {p.cadence}
+                  </span>
+                </div>
               </div>
 
               <ul className="mt-6 space-y-3">

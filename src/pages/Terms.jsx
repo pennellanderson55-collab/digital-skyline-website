@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import CustomCursor from '../components/CustomCursor.jsx'
 
 const SECTIONS = [
   {
@@ -38,6 +39,7 @@ const SECTIONS = [
 export default function Terms() {
   return (
     <div className="min-h-screen bg-ink-950 text-gray-200 font-sans">
+      <CustomCursor />
       {/* Header bar */}
       <div className="border-b border-white/[0.06] bg-ink-900/60 backdrop-blur-sm sticky top-0 z-50">
         <div className="container-max flex items-center justify-between h-16">
