@@ -12,14 +12,11 @@
 //     NEVER used as the recipient of an internal notification.
 // ============================================================================
 
-// --- Constants (overridable via env) ---------------------------------------
-// The owner inbox ALWAYS resolves to the verified business address. We only
-// honor an OWNER_EMAIL override when it's actually a valid-looking address —
-// a missing or malformed env var must never silently drop the internal lead
-// notification (that's how the owner stopped receiving consultation emails).
-const OWNER_FALLBACK = 'digitalskyline@digitalskylineco.com'
-const envOwner = (process.env.OWNER_EMAIL || '').trim()
-const OWNER_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(envOwner) ? envOwner : OWNER_FALLBACK
+// --- Constants -------------------------------------------------------------
+// Internal owner destination is HARD-CODED. Do NOT read OWNER_EMAIL from env
+// and do NOT use any other address — every internal lead/support notification
+// goes to exactly this one inbox, and nothing else is ever CC'd or BCC'd.
+const OWNER_EMAIL = 'pennellanderson55@gmail.com'
 const HELLO_EMAIL = process.env.HELLO_EMAIL || 'hello@digitalskylineco.com'
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || 'support@digitalskylineco.com'
 
@@ -111,7 +108,7 @@ export function buildEmail(type, data = {}) {
       // Internal — full submission details to the owner.
       const messages = [{
         from: FROM_HELLO, to: OWNER_EMAIL,
-        subject: `New Consultation Request - ${name}`,
+        subject: 'New Digital Skyline Consultation Request',
         html: layout({
           heading: 'New Consultation Request',
           intro: 'A new consultation was booked through the website.',
@@ -138,7 +135,7 @@ export function buildEmail(type, data = {}) {
       if (data.email) {
         messages.push({
           from: FROM_HELLO, to: data.email, reply_to: HELLO_EMAIL,
-          subject: 'Your Digital Skyline consultation is confirmed',
+          subject: 'Your Digital Skyline Consultation Request Was Received',
           html: layout({
             heading: 'Your consultation is confirmed',
             intro: `Thank you${data.name ? `, ${esc(data.name)}` : ''}! Your consultation with ${BRAND} is booked. Here are the details:`,
@@ -210,7 +207,7 @@ export function buildEmail(type, data = {}) {
       // Internal — full request to the owner.
       const messages = [{
         from: FROM_SUPPORT, to: OWNER_EMAIL,
-        subject: `New Support Request - ${name}`,
+        subject: 'New Digital Skyline Support Request',
         html: layout({
           heading: 'New Support Request',
           intro: 'A support request was submitted from the website.',
@@ -228,7 +225,7 @@ export function buildEmail(type, data = {}) {
       if (data.email) {
         messages.push({
           from: FROM_SUPPORT, to: data.email, reply_to: SUPPORT_EMAIL,
-          subject: 'We received your support request',
+          subject: 'Your Digital Skyline Support Request Was Received',
           html: layout({
             heading: 'Your support request was received',
             intro: `Thanks${data.name ? `, ${esc(data.name)}` : ''} — our team has your request and will follow up by email as soon as possible.`,
