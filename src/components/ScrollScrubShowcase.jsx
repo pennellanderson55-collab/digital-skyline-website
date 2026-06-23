@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { Sparkle, Arrow } from './Icons.jsx'
 
 /* ============================================================
  * "In Motion" — the globe spins continuously and smoothly.
@@ -150,10 +149,7 @@ export default function ScrollScrubShowcase() {
       <div className="pointer-events-none absolute inset-0 flex items-center">
         <div className="container-max">
           <div className="max-w-xl">
-            <div className="eyebrow">
-              <Sparkle className="h-3.5 w-3.5" /> In Motion
-            </div>
-            <h2 className="mt-5 font-display text-4xl font-bold leading-[1.08] tracking-tight text-gray-50 sm:text-5xl lg:text-6xl">
+            <h2 className="font-display text-4xl font-bold leading-[1.08] tracking-tight text-gray-50 sm:text-5xl lg:text-6xl">
               Every detail, engineered to{' '}
               <span className="text-gold-gradient">unfold.</span>
             </h2>
@@ -161,12 +157,6 @@ export default function ScrollScrubShowcase() {
               The same obsessive craft we bring to every website, app, and
               system we build.
             </p>
-            {!reduced && (
-              <div className="mt-7 flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.25em] text-gold-200/80">
-                Scroll or drag to spin faster
-                <Arrow className="h-4 w-4" />
-              </div>
-            )}
           </div>
         </div>
       </div>

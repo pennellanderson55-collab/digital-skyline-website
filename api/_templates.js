@@ -13,9 +13,26 @@
 // ============================================================================
 
 // --- Constants (overridable via env) ---------------------------------------
-const OWNER_EMAIL = process.env.OWNER_EMAIL || 'digitalskyline@digitalskylineco.com'
+// The owner inbox ALWAYS resolves to the verified business address. We only
+// honor an OWNER_EMAIL override when it's actually a valid-looking address —
+// a missing or malformed env var must never silently drop the internal lead
+// notification (that's how the owner stopped receiving consultation emails).
+const OWNER_FALLBACK = 'digitalskyline@digitalskylineco.com'
+const envOwner = (process.env.OWNER_EMAIL || '').trim()
+const OWNER_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(envOwner) ? envOwner : OWNER_FALLBACK
 const HELLO_EMAIL = process.env.HELLO_EMAIL || 'hello@digitalskylineco.com'
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || 'support@digitalskylineco.com'
+
+// Absolute base URL so email clients can load public assets (no relative paths).
+const SITE_URL = (process.env.SITE_URL || 'https://digitalskylineco.com').replace(/\/$/, '')
+
+// Premium brand visual shown ONLY at the bottom of client confirmations
+// (never in the internal owner notification). Referenced by absolute URL —
+// not attached as a file — and fully responsive across email clients.
+const confirmationImage = `<div style="margin-top:26px">
+  <img src="${SITE_URL}/orb-header.png" alt="${'Digital Skyline Co.'}" width="488"
+    style="display:block;width:100%;max-width:488px;height:auto;border-radius:12px;border:1px solid #23232a" />
+</div>`
 
 // Sender identities (must be on a Resend-verified business domain).
 const FROM_HELLO = process.env.EMAIL_FROM || `Digital Skyline Co. <${HELLO_EMAIL}>`
@@ -103,6 +120,7 @@ export function buildEmail(type, data = {}) {
             ['Email', data.email],
             ['Phone', data.phone],
             ['Business / company', data.business],
+            ['Website', data.website],
             ['Project type', data.project_type],
             ['Budget', data.budget],
             ['Lead source', withOther(data.heard_about, data.heard_about_other)],
@@ -137,7 +155,7 @@ export function buildEmail(type, data = {}) {
                 <li>We map out the smartest next step together.</li>
               </ol>
               <p style="margin:16px 0 0">We'll confirm your time within 24 hours. Need to reschedule? Just reply to this email.</p>
-            </div>`,
+            </div>${confirmationImage}`,
           }),
         })
       }
@@ -178,7 +196,7 @@ export function buildEmail(type, data = {}) {
               <strong style="color:#fff">How your project reference works</strong>
               <p style="margin:8px 0 0">Your reference <strong style="color:${GOLD}">${esc(ref)}</strong> is the master ID for everything related to your project — payments, invoices, support requests, files, and timeline all connect to it.</p>
               <p style="margin:12px 0 0">Please include it when you contact us or submit a support request so we can help you faster. It is <strong>not</strong> a password or login — just your project's name in our system.</p>
-            </div>`,
+            </div>${confirmationImage}`,
           }),
         })
       }
@@ -215,6 +233,7 @@ export function buildEmail(type, data = {}) {
             heading: 'Your support request was received',
             intro: `Thanks${data.name ? `, ${esc(data.name)}` : ''} — our team has your request and will follow up by email as soon as possible.`,
             rows: compact([['Project reference', ref], ['Support type', supportType]]),
+            body: confirmationImage,
             footnote: 'Please keep this email for your records. Replying to it reaches our support team directly.',
           }),
         })
