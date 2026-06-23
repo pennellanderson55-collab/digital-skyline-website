@@ -40,6 +40,35 @@ const BRAND = 'Digital Skyline Co.'
 const GOLD = '#d4af37'
 const INK = '#0a0a0c'
 
+// Pricing section for CLIENT confirmation emails only (mirrors the website's
+// plans: crossed-out value price above the current price). Email-safe markup —
+// nested tables + inline styles for broad client support.
+const PLANS = [
+  { name: 'Starter Website', value: '$2,500', price: 'Starting at $750', cadence: 'per project', blurb: 'A professional online presence for small businesses.' },
+  { name: 'Business Website', value: '$5,000', price: 'Starting at $1,500', cadence: 'per project', blurb: 'A complete digital presence for growing businesses.', featured: true },
+  { name: 'Custom Solutions', value: '$8,000+', price: 'Custom Quote', cadence: 'project scope', blurb: 'Apps, portals, dashboards, and fully custom systems.' },
+]
+
+const pricingBlock = `<div style="margin-top:28px">
+  <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:${GOLD};font-weight:700">Our Packages</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px">
+    ${PLANS.map((p) => `<tr><td style="padding:0 0 12px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#16161b;border:1px solid ${p.featured ? 'rgba(212,175,55,0.5)' : '#23232a'};border-radius:12px">
+        <tr><td style="padding:16px 18px">
+          <div style="color:#f5f5f7;font-size:16px;font-weight:700">${p.name}${p.featured ? ` &nbsp;<span style="display:inline-block;background:${GOLD};color:${INK};font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:2px 7px;border-radius:9px;vertical-align:middle">Most popular</span>` : ''}</div>
+          <div style="margin-top:7px">
+            <span style="color:#9a8a55;font-size:14px;text-decoration:line-through">${p.value}</span>
+            <span style="color:${GOLD};font-size:18px;font-weight:700;padding-left:8px">${p.price}</span>
+            <span style="color:#7c828c;font-size:11px;text-transform:uppercase;letter-spacing:1px;padding-left:6px">${p.cadence}</span>
+          </div>
+          <div style="margin-top:7px;color:#9aa0aa;font-size:13px;line-height:1.5">${p.blurb}</div>
+        </td></tr>
+      </table>
+    </td></tr>`).join('')}
+  </table>
+  <div style="margin-top:4px;color:#7c828c;font-size:12px;line-height:1.6">Limited-time intro pricing · Free consultation included · <a href="${SITE_URL}/#pricing" style="color:${GOLD};text-decoration:none">View full pricing →</a></div>
+</div>`
+
 const esc = (v) =>
   String(v ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -152,7 +181,7 @@ export function buildEmail(type, data = {}) {
                 <li>We map out the smartest next step together.</li>
               </ol>
               <p style="margin:16px 0 0">We'll confirm your time within 24 hours. Need to reschedule? Just reply to this email.</p>
-            </div>${confirmationImage}`,
+            </div>${pricingBlock}${confirmationImage}`,
           }),
         })
       }
@@ -230,7 +259,7 @@ export function buildEmail(type, data = {}) {
             heading: 'Your support request was received',
             intro: `Thanks${data.name ? `, ${esc(data.name)}` : ''} — our team has your request and will follow up by email as soon as possible.`,
             rows: compact([['Project reference', ref], ['Support type', supportType]]),
-            body: confirmationImage,
+            body: `${pricingBlock}${confirmationImage}`,
             footnote: 'Please keep this email for your records. Replying to it reaches our support team directly.',
           }),
         })
