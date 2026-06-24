@@ -19,17 +19,20 @@ export default async function handler(req, res) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     // Not configured yet — graceful no-op so booking/support flows still succeed.
+    console.error('[send-email] RESEND_API_KEY is not set — skipping send. Add it in Vercel → Settings → Environment Variables.')
     return res.status(200).json({ ok: false, skipped: 'RESEND_API_KEY not set' })
   }
 
   let body = req.body
   if (typeof body === 'string') { try { body = JSON.parse(body) } catch { body = {} } }
   const { type, data } = body || {}
+  console.log(`[send-email] received request type="${type}" client="${(data && data.email) || 'none'}"`)
 
   let messages
   try {
     messages = buildEmail(type, data || {})
   } catch (e) {
+    console.error(`[send-email] template build failed for type="${type}":`, e.message)
     return res.status(400).json({ error: e.message })
   }
 
@@ -42,8 +45,13 @@ export default async function handler(req, res) {
     (m) => typeof m.from === 'string' && m.from.includes(BUSINESS_DOMAIN) && typeof m.to === 'string' && m.to.includes('@')
   )
   if (!allValid) {
+    console.error('[send-email] refusing to send — invalid From/To on one or more messages:',
+      messages.map((m) => ({ from: m.from, to: m.to, subject: m.subject })))
     return res.status(500).json({ error: 'Refusing to send: every message must have a business From and a valid To.' })
   }
+
+  // Visibility in Vercel logs: exactly who each message is addressed to/from.
+  console.log('[send-email] sending:', messages.map((m) => ({ from: m.from, to: m.to, subject: m.subject })))
 
   try {
     const results = await Promise.allSettled(
@@ -52,13 +60,22 @@ export default async function handler(req, res) {
           method: 'POST',
           headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify(m),
-        }).then(async (r) => { if (!r.ok) throw new Error(await r.text()) })
+        }).then(async (r) => {
+          const text = await r.text()
+          if (!r.ok) throw new Error(`Resend ${r.status} sending to ${m.to}: ${text}`)
+          return text
+        })
       )
     )
     const failed = results.filter((r) => r.status === 'rejected').map((f) => String(f.reason))
-    if (failed.length) return res.status(502).json({ ok: false, sent: messages.length - failed.length, errors: failed })
+    if (failed.length) {
+      console.error(`[send-email] ${failed.length}/${messages.length} message(s) failed:`, failed)
+      return res.status(502).json({ ok: false, sent: messages.length - failed.length, errors: failed })
+    }
+    console.log(`[send-email] ok — sent ${messages.length} message(s) for type="${type}"`)
     return res.status(200).json({ ok: true, sent: messages.length })
   } catch (e) {
+    console.error('[send-email] unexpected error:', e)
     return res.status(500).json({ error: String(e) })
   }
 }
