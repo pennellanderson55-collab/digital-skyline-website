@@ -32,11 +32,60 @@ const ITEMS = [
   { id: 9, type: 'video', category: 'Landing Page', tag: 'Landing Page', title: 'Farios', desc: 'A walkthrough of the Farios plumbing landing page.', grad: 'g5', glow: 'left-[18%] top-[24%]', src: '/fario.mov', poster: '/fario.png' },
   { id: 5, type: 'image', category: 'Dashboards', tag: 'Dashboard', title: 'Hayes Properties', desc: 'A property-owner dashboard — track units, tenants, and performance at a glance.', grad: 'g5', glow: 'left-[20%] top-[28%]', src: '/hayes-dashboard.png', full: '/hayes-dashboard.png' },
   { id: 6, type: 'video', category: 'Dashboards', tag: 'Dashboard', title: 'Hayes Properties', desc: 'A walkthrough of the Hayes Properties owner dashboard in action.', grad: 'g6', glow: 'right-[20%] top-[22%]', src: '/hayes-dashboard.mov', poster: '/hayes-dashboard.png' },
-  { id: 1, type: 'image', category: 'Website', tag: 'Website', title: 'Legacy Quest', desc: 'A premium family legacy platform designed to organize memories, goals, family members, and long-term growth.', grad: 'g1', glow: 'left-[15%] top-[20%]', src: 'https://bjfuopeqaodksjkhrqda.supabase.co/storage/v1/object/public/Portfolio/Knightsoul2.png', full: 'https://bjfuopeqaodksjkhrqda.supabase.co/storage/v1/object/public/Portfolio/Knightsoul2.png' },
-  { id: 2, type: 'video', category: 'Website', tag: 'Website', title: 'KnightSoul', desc: 'A cinematic gaming landing page built with immersive visuals, motion, and interactive web design.', grad: 'g2', glow: 'right-[18%] top-[30%]', src: 'https://bjfuopeqaodksjkhrqda.supabase.co/storage/v1/object/public/Portfolio/KnightSoulCompressed.mp4', full: 'https://bjfuopeqaodksjkhrqda.supabase.co/storage/v1/object/public/Portfolio/KnightSoulCompressed.mp4', poster: 'https://bjfuopeqaodksjkhrqda.supabase.co/storage/v1/object/public/Portfolio/Knightsoul2.png' },
+  { id: 1, type: 'image', category: 'Website', tag: 'Website', title: 'Legacy Quest', desc: 'A premium family legacy platform designed to organize memories, goals, family members, and long-term growth.', grad: 'g1', glow: 'left-[15%] top-[20%]', src: '/knightsoul.png', full: '/knightsoul.png' },
+  { id: 2, type: 'video', category: 'Website', tag: 'Website', title: 'KnightSoul', desc: 'A cinematic gaming landing page built with immersive visuals, motion, and interactive web design.', grad: 'g2', glow: 'right-[18%] top-[30%]', src: '/knightsoul.mp4', full: '/knightsoul.mp4', poster: '/knightsoul.png' },
   { id: 3, type: 'image', category: 'Apps', tag: 'App', title: 'Legacy Quest', desc: 'The Family Operating System — organize traditions, build ventures, shape generations.', grad: 'g3', glow: 'left-[25%] bottom-[25%]', src: '/legacy-quest.jpg', full: '/legacy-quest-full.jpg', pos: '50% 50%' },
   { id: 4, type: 'video', category: 'Apps', tag: 'App', title: 'Legacy Quest', desc: 'A walkthrough of Legacy Quest — touring the Family Operating System and how it organizes traditions, ventures, and generations.', grad: 'g4', glow: 'right-[22%] bottom-[20%]', src: '/legacy-quest-video.mov', poster: '/legacy-quest.jpg' },
 ]
+
+/* --------------------------- lazy card video ------------------------------ */
+/*
+ * Bandwidth guard: a card video must NEVER download until its card is actually
+ * scrolled into view. We start with `preload="none"` and no `src`, show the
+ * poster, and only attach the source + play once the element intersects the
+ * viewport (which, because the rail overflows horizontally, also covers cards
+ * parked off to the side). Off-screen → paused. This keeps homepage visitors
+ * who never reach the gallery from pulling any video bytes at all.
+ */
+function LazyCardVideo({ item, onError }) {
+  const ref = useRef(null)
+  const [load, setLoad] = useState(false) // becomes true on first view → attaches src
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (typeof IntersectionObserver === 'undefined') { setLoad(true); return }
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setLoad(true)
+          el.play?.().catch(() => {})
+        } else {
+          el.pause?.()
+        }
+      },
+      { threshold: 0.25 }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  return (
+    <video
+      ref={ref}
+      src={load ? item.src : undefined}
+      poster={item.poster}
+      muted
+      loop
+      playsInline
+      preload="none"
+      onCanPlay={(e) => { e.currentTarget.play?.().catch(() => {}) }}
+      onError={onError}
+      className="absolute inset-0 h-full w-full"
+      style={{ objectFit: item.fit || 'cover', objectPosition: item.pos || 'center' }}
+    />
+  )
+}
 
 /* ------------------------------- card ------------------------------------- */
 
@@ -61,23 +110,13 @@ function PortfolioCard({ item, onView }) {
         {/* media fills the card */}
         {item.src && mediaOk ? (
           item.type === 'video' ? (
-            <video
-              src={item.src}
-              poster={item.poster}
-              muted
-              loop
-              autoPlay
-              playsInline
-              preload="metadata"
-              onError={() => setMediaOk(false)}
-              className="absolute inset-0 h-full w-full"
-              style={{ objectFit: item.fit || 'cover', objectPosition: item.pos || 'center' }}
-            />
+            <LazyCardVideo item={item} onError={() => setMediaOk(false)} />
           ) : (
             <img
               src={item.src}
               alt={item.title}
               loading="lazy"
+              decoding="async"
               onError={() => setMediaOk(false)}
               className="absolute inset-0 h-full w-full"
               style={{ objectFit: item.fit || 'cover', objectPosition: item.pos || 'center' }}
