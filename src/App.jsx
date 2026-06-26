@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar.jsx'
 import Hero from './components/Hero.jsx'
@@ -15,14 +16,17 @@ import Marquee from './components/Marquee.jsx'
 import EasterEgg from './components/EasterEgg.jsx'
 import SoundToggle from './components/SoundToggle.jsx'
 import ScrollScrubShowcase from './components/ScrollScrubShowcase.jsx'
-import Privacy from './pages/Privacy.jsx'
-import Terms from './pages/Terms.jsx'
-import Status from './pages/Status.jsx'
-import ThankYou from './pages/ThankYou.jsx'
-import ConsultationConfirmed from './pages/ConsultationConfirmed.jsx'
-import ClientPortal from './pages/ClientPortal.jsx'
-import Support from './pages/Support.jsx'
-import Admin from './admin/Admin.jsx'
+
+// Secondary routes are code-split: the homepage no longer ships the admin
+// dashboard or legal/portal pages in its bundle — each loads on demand.
+const Privacy = lazy(() => import('./pages/Privacy.jsx'))
+const Terms = lazy(() => import('./pages/Terms.jsx'))
+const Status = lazy(() => import('./pages/Status.jsx'))
+const ThankYou = lazy(() => import('./pages/ThankYou.jsx'))
+const ConsultationConfirmed = lazy(() => import('./pages/ConsultationConfirmed.jsx'))
+const ClientPortal = lazy(() => import('./pages/ClientPortal.jsx'))
+const Support = lazy(() => import('./pages/Support.jsx'))
+const Admin = lazy(() => import('./admin/Admin.jsx'))
 
 function Home() {
   return (
@@ -63,17 +67,19 @@ export default function App() {
           <SmoothScroll />
         </>
       )}
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/status" element={<Status />} />
-        <Route path="/thank-you" element={<ThankYou />} />
-        <Route path="/consultation-confirmed" element={<ConsultationConfirmed />} />
-        <Route path="/client-portal" element={<ClientPortal />} />
-        <Route path="/support" element={<Support />} />
-        <Route path="/admin" element={<Admin />} />
-      </Routes>
+      <Suspense fallback={<div className="min-h-screen bg-ink-950" aria-hidden="true" />}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/status" element={<Status />} />
+          <Route path="/thank-you" element={<ThankYou />} />
+          <Route path="/consultation-confirmed" element={<ConsultationConfirmed />} />
+          <Route path="/client-portal" element={<ClientPortal />} />
+          <Route path="/support" element={<Support />} />
+          <Route path="/admin" element={<Admin />} />
+        </Routes>
+      </Suspense>
     </>
   )
 }

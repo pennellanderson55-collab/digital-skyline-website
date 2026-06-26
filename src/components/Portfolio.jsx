@@ -351,6 +351,7 @@ function Lightbox({ item, onClose }) {
             <img
               src={item.full || item.src}
               alt={item.title}
+              decoding="async"
               className="max-h-[82vh] w-auto max-w-full object-contain"
             />
           )

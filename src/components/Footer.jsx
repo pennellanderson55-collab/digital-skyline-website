@@ -53,7 +53,7 @@ export default function Footer() {
           <div>
             <a href="#top" className="flex items-center gap-3" aria-label="Digital Skyline Co. — home">
               <span className="block h-20 w-20 overflow-hidden rounded-full">
-                <img src="/logo.png" alt="Digital Skyline Co." className="h-full w-full scale-[1.08] object-cover" />
+                <img src="/logo.png" alt="Digital Skyline Co." loading="lazy" decoding="async" className="h-full w-full scale-[1.08] object-cover" />
               </span>
             </a>
             <p className="mt-4 max-w-xs text-sm text-gray-400">
