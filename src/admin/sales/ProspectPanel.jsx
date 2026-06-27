@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react'
 import ProspectForm from './ProspectForm.jsx'
+import WebsiteIntelligence from './WebsiteIntelligence.jsx'
 import {
   PROSPECT_STATUSES, prospectStatusStyle, ratingStars, scoreBand,
   normalizeUrl, fmtDate, fmtDateTime,
 } from './prospects.js'
+
+const PANEL_TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'intelligence', label: 'Website Intelligence' },
+  { key: 'outreach', label: 'Outreach AI' },
+]
 
 /**
  * Premium right-side slide-over for a single prospect.
@@ -11,6 +18,7 @@ import {
  * Actions: Edit · Delete · Schedule Follow-up · Convert to Client (placeholder).
  */
 export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
+  const [tab, setTab] = useState('overview')
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -20,7 +28,7 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
 
   // Reset transient UI whenever a different prospect is opened.
   useEffect(() => {
-    setEditing(false); setConfirmDel(false); setScheduling(false)
+    setTab('overview'); setEditing(false); setConfirmDel(false); setScheduling(false)
     setFollowDate(prospect.next_follow_up || ''); setConvertNotice(false)
   }, [prospect.id, prospect.next_follow_up])
 
@@ -83,8 +91,23 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
           <button onClick={onClose} aria-label="Close" className="shrink-0 text-gray-500 transition-colors hover:text-gray-200">✕</button>
         </div>
 
+        {/* tabs */}
+        <div className="flex gap-1 border-b border-white/[0.08] px-6">
+          {PANEL_TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`-mb-px border-b-2 px-3 py-3 text-sm transition-colors ${
+                tab === t.key ? 'border-gold-400 text-gold-100' : 'border-transparent text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         <div className="px-6 py-6">
-          {editing ? (
+          {tab === 'overview' && (editing ? (
             <ProspectForm initial={p} onSubmit={saveEdit} onCancel={() => setEditing(false)} submitLabel="Save changes" busy={busy} />
           ) : (
             <>
@@ -174,7 +197,11 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
                 <p className="whitespace-pre-wrap text-sm text-gray-300">{p.notes || '—'}</p>
               </Group>
             </>
-          )}
+          ))}
+
+          {tab === 'intelligence' && <WebsiteIntelligence prospect={p} onUpdate={onUpdate} />}
+
+          {tab === 'outreach' && <OutreachPlaceholder prospect={p} />}
         </div>
 
         {/* delete confirm */}
@@ -215,6 +242,23 @@ function Row({ label, value }) {
     <div className="flex items-start justify-between gap-4">
       <span className="shrink-0 text-sm text-gray-500">{label}</span>
       <span className="text-right text-sm text-gray-200">{value || <span className="text-gray-600">—</span>}</span>
+    </div>
+  )
+}
+
+function OutreachPlaceholder() {
+  return (
+    <div className="rounded-2xl border border-dashed border-gold-400/25 bg-gold-400/[0.03] p-8 text-center">
+      <div className="eyebrow mx-auto">Sprint 3</div>
+      <h4 className="mt-4 font-display text-xl font-semibold text-gray-50">Outreach AI</h4>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-gray-400">
+        Coming next: turn a website audit into ready-to-send outreach — personalized emails,
+        follow-up sequences, and call scripts generated from the prospect's biggest opportunities.
+      </p>
+      <p className="mt-3 text-xs text-gray-500">
+        For now, run an audit in <span className="text-gold-200">Website Intelligence</span> — its
+        Sales Talking Points and Follow-up Questions are written for exactly this.
+      </p>
     </div>
   )
 }
