@@ -1,12 +1,37 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { Check, Arrow, Sparkle } from '../components/Icons.jsx'
+import { Check, Arrow, Sparkle, Activity, Chart, User, Shield, Cube, Bolt, Scan } from '../components/Icons.jsx'
 import Clients from './Clients.jsx'
 import Projects from './Projects.jsx'
 import Support, { SupportModal } from './Support.jsx'
 import ProjectProfile from './ProjectProfile.jsx'
 import { INITIAL_PROJECT_STAGE, balanceDue, fmtMoney, fmtDateTime } from './ops.js'
 import { sendEmail } from '../lib/email.js'
+import SalesDashboard from './sales/SalesDashboard.jsx'
+import Prospects from './sales/Prospects.jsx'
+import SalesPipeline from './sales/SalesPipeline.jsx'
+import FollowUps from './sales/FollowUps.jsx'
+import SalesAnalytics from './sales/SalesAnalytics.jsx'
+import ProspectPanel from './sales/ProspectPanel.jsx'
+
+// Admin navigation — grouped sidebar. Operations = the existing modules;
+// Sales = the new Outreach CRM (expandable). Keys are unique across groups.
+const OPS_NAV = [
+  { key: 'Home', label: 'Home', icon: Activity },
+  { key: 'Consultations', label: 'Consultations', icon: User },
+  { key: 'Pipeline', label: 'Pipeline', icon: Chart },
+  { key: 'Clients', label: 'Clients', icon: Shield },
+  { key: 'Projects', label: 'Projects', icon: Cube },
+  { key: 'Support', label: 'Support', icon: Bolt },
+  { key: 'Analytics', label: 'Analytics', icon: Chart },
+]
+const SALES_NAV = [
+  { key: 'sales:dashboard', label: 'Dashboard', icon: Activity },
+  { key: 'sales:prospects', label: 'Prospects', icon: Scan },
+  { key: 'sales:pipeline', label: 'Pipeline', icon: Chart },
+  { key: 'sales:followups', label: 'Follow-ups', icon: Bolt },
+  { key: 'sales:analytics', label: 'Analytics', icon: Chart },
+]
 
 const STATUSES = [
   'New', 'Contacted', 'Consultation Scheduled',
@@ -147,10 +172,8 @@ function Login() {
 
 /* -------------------------------------------------------------- dashboard */
 
-const TABS = ['Home', 'Consultations', 'Pipeline', 'Clients', 'Projects', 'Support', 'Analytics']
-
 function Dashboard({ session }) {
-  const [tab, setTab] = useState('Home')
+  const [nav, setNav] = useState('Home')
   const [rows, setRows] = useState([])          // consultations / leads
   const [projects, setProjects] = useState([])  // projects + embedded client
   const [support, setSupport] = useState([])    // support requests
@@ -160,6 +183,16 @@ function Dashboard({ session }) {
   const [active, setActive] = useState(null)            // consultation detail modal
   const [activeProject, setActiveProject] = useState(null) // open client/project profile
   const [activeSupport, setActiveSupport] = useState(null) // support detail modal
+
+  // Sales / Outreach CRM — loaded lazily the first time a Sales view is opened
+  // (one query for the whole module; no extra load for visitors who never
+  // touch Sales). Best-effort so the dashboard still works before the
+  // sprint1_prospects.sql migration has been run.
+  const [prospects, setProspects] = useState([])
+  const [prospectsLoaded, setProspectsLoaded] = useState(false)
+  const [prospectsLoading, setProspectsLoading] = useState(false)
+  const [prospectsError, setProspectsError] = useState('')
+  const [activeProspect, setActiveProspect] = useState(null) // panel opened from dashboard/pipeline/follow-ups
 
   // Derive the client list from the projects join (clients 1──1 project for now).
   const clients = useMemo(() => {
@@ -189,6 +222,57 @@ function Dashboard({ session }) {
   }
 
   useEffect(() => { load() }, [])
+
+  // ── Sales / Outreach CRM data ──────────────────────────────────────────
+  const loadProspects = async () => {
+    setProspectsLoading(true)
+    setProspectsError('')
+    // Ordered + bounded so the query stays cheap and is pagination-ready
+    // (the Prospects table paginates client-side over this set for now).
+    const res = await supabase
+      .from('prospects')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1000)
+    if (res.error) {
+      setProspectsError(
+        /relation .* does not exist/i.test(res.error.message)
+          ? 'Prospects table not found — run supabase/sprint1_prospects.sql in Supabase, then Refresh.'
+          : res.error.message,
+      )
+    } else {
+      setProspects(res.data || [])
+    }
+    setProspectsLoaded(true)
+    setProspectsLoading(false)
+  }
+
+  // Lazy-load the first time any Sales view is opened.
+  useEffect(() => {
+    if (nav.startsWith('sales:') && !prospectsLoaded && !prospectsLoading) loadProspects()
+  }, [nav, prospectsLoaded, prospectsLoading])
+
+  const addProspect = async (patch) => {
+    const { data, error: e } = await supabase.from('prospects').insert(patch).select().single()
+    if (e) { setProspectsError(e.message); return }
+    setProspects((ps) => [data, ...ps])
+  }
+
+  const updateProspect = async (id, patch) => {
+    // Optimistic — reflect immediately, reconcile/revert on error.
+    setProspects((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+    const { data, error: e } = await supabase.from('prospects').update(patch).eq('id', id).select().single()
+    if (e) { setProspectsError(e.message); loadProspects(); return }
+    if (data) setProspects((ps) => ps.map((p) => (p.id === id ? data : p)))
+  }
+
+  const deleteProspect = async (id) => {
+    const prev = prospects
+    setProspects((ps) => ps.filter((p) => p.id !== id))
+    setActiveProspect((a) => (a && a.id === id ? null : a))
+    const { error: e } = await supabase.from('prospects').delete().eq('id', id)
+    if (e) { setProspectsError(e.message); setProspects(prev) }
+  }
 
   const updateRow = async (id, patch) => {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
@@ -312,7 +396,11 @@ function Dashboard({ session }) {
     setActiveProject(null)
   }
 
-  const openTab = (t) => { setTab(t); setActiveProject(null) }
+  const [navOpenMobile, setNavOpenMobile] = useState(false)
+  const openNav = (key) => { setNav(key); setActiveProject(null); setNavOpenMobile(false) }
+
+  const isSales = nav.startsWith('sales:')
+  const navLabel = [...OPS_NAV, ...SALES_NAV].find((n) => n.key === nav)?.label || 'Home'
 
   return (
     <Shell>
@@ -320,61 +408,101 @@ function Dashboard({ session }) {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-gray-50">
-            Digital Skyline <span className="text-gold-gradient">Admin</span>
+            Digital Skyline <span className="text-gold-gradient">OS</span>
           </h1>
           <p className="text-xs text-gray-500">{session.user.email}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={load} className="btn-ghost text-xs">Refresh</button>
+          <button
+            onClick={isSales ? loadProspects : load}
+            className="btn-ghost text-xs"
+          >
+            Refresh
+          </button>
           <button onClick={() => supabase.auth.signOut()} className="btn-ghost text-xs">Sign out</button>
         </div>
       </div>
 
-      {/* tabs */}
-      <div className="mt-6 flex flex-wrap gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => openTab(t)}
-            className={`rounded-xl border px-4 py-2 text-sm transition-colors ${
-              tab === t && !activeProject
-                ? 'border-gold-400/60 bg-gold-400/10 text-gold-100'
-                : 'border-white/10 bg-white/[0.02] text-gray-300 hover:border-gold-400/40'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      {/* mobile section bar */}
+      <button
+        onClick={() => setNavOpenMobile((o) => !o)}
+        className="mt-6 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-gray-200 lg:hidden"
+      >
+        <span className="font-display font-medium">{isSales ? `Sales · ${navLabel}` : navLabel}</span>
+        <Arrow className={`h-4 w-4 transition-transform ${navOpenMobile ? 'rotate-90' : ''}`} />
+      </button>
 
-      {error && <p className="mt-4 text-sm text-rose-400">{error}</p>}
+      <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:gap-8">
+        {/* sidebar */}
+        <aside className={`${navOpenMobile ? 'block' : 'hidden'} lg:block lg:w-60 lg:shrink-0`}>
+          <nav className="lg:sticky lg:top-6 space-y-6">
+            <NavGroup label="Operations">
+              {OPS_NAV.map((item) => (
+                <NavItem key={item.key} item={item} active={nav === item.key && !activeProject} onClick={() => openNav(item.key)} />
+              ))}
+            </NavGroup>
+            <NavGroup label="Sales" collapsible defaultOpen badge={prospectsLoaded ? prospects.length : null}>
+              {SALES_NAV.map((item) => (
+                <NavItem key={item.key} item={item} active={nav === item.key} onClick={() => openNav(item.key)} />
+              ))}
+            </NavGroup>
+          </nav>
+        </aside>
 
-      <div className="mt-8">
-        {loading ? (
-          <p className="text-gray-500">Loading…</p>
-        ) : activeProject ? (
-          <ProjectProfile
-            project={activeProject}
-            history={history.filter((h) => h.project_id === activeProject.id)}
-            onClose={() => setActiveProject(null)}
-            onSaveProject={(patch) => updateProject(activeProject.id, patch)}
-            onSaveClient={(patch) => updateClient(activeProject.client_id, patch)}
-            onStageChange={(stage) => changeStage(activeProject, stage)}
-            onRevert={() => revertToLead(activeProject)}
-          />
-        ) : (
-          <>
-            {tab === 'Home' && <Home consultations={rows} clients={clients} projects={projects} support={support} history={history} />}
-            {tab === 'Consultations' && (
-              <Consultations rows={rows} onOpen={setActive} onStatus={updateRow} />
-            )}
-            {tab === 'Pipeline' && <Pipeline rows={rows} onStatus={updateRow} onOpen={setActive} />}
-            {tab === 'Clients' && <Clients projects={projects} onOpen={setActiveProject} />}
-            {tab === 'Projects' && <Projects projects={projects} onOpen={setActiveProject} onStageChange={changeStage} />}
-            {tab === 'Support' && <Support rows={support} onStatus={updateSupport} onOpen={setActiveSupport} />}
-            {tab === 'Analytics' && <Analytics rows={rows} />}
-          </>
-        )}
+        {/* content */}
+        <div className="min-w-0 flex-1">
+          {error && !isSales && <p className="mb-4 text-sm text-rose-400">{error}</p>}
+
+          {/* Sales / Outreach CRM */}
+          {isSales ? (
+            <>
+              {prospectsError && <p className="mb-4 rounded-xl border border-rose-400/30 bg-rose-400/[0.06] px-4 py-3 text-sm text-rose-200">{prospectsError}</p>}
+              {nav === 'sales:dashboard' && (
+                <SalesDashboard
+                  prospects={prospects} consultations={rows} clients={clients} projects={projects}
+                  onGoToProspects={() => openNav('sales:prospects')}
+                />
+              )}
+              {nav === 'sales:prospects' && (
+                <Prospects
+                  prospects={prospects} loading={prospectsLoading} error={null}
+                  onAdd={addProspect} onUpdate={updateProspect} onDelete={deleteProspect}
+                />
+              )}
+              {nav === 'sales:pipeline' && (
+                <SalesPipeline prospects={prospects} onUpdate={updateProspect} onOpen={setActiveProspect} />
+              )}
+              {nav === 'sales:followups' && (
+                <FollowUps prospects={prospects} onOpen={setActiveProspect} />
+              )}
+              {nav === 'sales:analytics' && <SalesAnalytics prospects={prospects} />}
+            </>
+          ) : loading ? (
+            <p className="text-gray-500">Loading…</p>
+          ) : activeProject ? (
+            <ProjectProfile
+              project={activeProject}
+              history={history.filter((h) => h.project_id === activeProject.id)}
+              onClose={() => setActiveProject(null)}
+              onSaveProject={(patch) => updateProject(activeProject.id, patch)}
+              onSaveClient={(patch) => updateClient(activeProject.client_id, patch)}
+              onStageChange={(stage) => changeStage(activeProject, stage)}
+              onRevert={() => revertToLead(activeProject)}
+            />
+          ) : (
+            <>
+              {nav === 'Home' && <Home consultations={rows} clients={clients} projects={projects} support={support} history={history} />}
+              {nav === 'Consultations' && (
+                <Consultations rows={rows} onOpen={setActive} onStatus={updateRow} />
+              )}
+              {nav === 'Pipeline' && <Pipeline rows={rows} onStatus={updateRow} onOpen={setActive} />}
+              {nav === 'Clients' && <Clients projects={projects} onOpen={setActiveProject} />}
+              {nav === 'Projects' && <Projects projects={projects} onOpen={setActiveProject} onStageChange={changeStage} />}
+              {nav === 'Support' && <Support rows={support} onStatus={updateSupport} onOpen={setActiveSupport} />}
+              {nav === 'Analytics' && <Analytics rows={rows} />}
+            </>
+          )}
+        </div>
       </div>
 
       {active && (
@@ -384,7 +512,7 @@ function Dashboard({ session }) {
           onStatus={(s) => updateRow(active.id, { status: s })}
           onSaveNotes={(n) => updateRow(active.id, { admin_notes: n })}
           onConvert={() => convertToClient(active)}
-          onConverted={() => { setActive(null); setTab('Clients') }}
+          onConverted={() => { setActive(null); setNav('Clients') }}
         />
       )}
 
@@ -396,7 +524,60 @@ function Dashboard({ session }) {
           onSaveNotes={(n) => updateSupport(activeSupport.id, { admin_notes: n })}
         />
       )}
+
+      {/* Prospect panel opened from Sales Pipeline / Follow-ups (the Prospects
+          table opens its own panel internally). */}
+      {activeProspect && (() => {
+        const live = prospects.find((p) => p.id === activeProspect.id)
+        return live ? (
+          <ProspectPanel
+            prospect={live}
+            onClose={() => setActiveProspect(null)}
+            onUpdate={updateProspect}
+            onDelete={deleteProspect}
+          />
+        ) : null
+      })()}
     </Shell>
+  )
+}
+
+/* ----------------------------------------------------------- sidebar nav */
+
+function NavGroup({ label, children, collapsible, defaultOpen = true, badge }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => collapsible && setOpen((o) => !o)}
+        className={`mb-2 flex w-full items-center justify-between px-3 font-mono text-[11px] uppercase tracking-[0.18em] text-gray-500 ${collapsible ? 'hover:text-gray-300' : 'cursor-default'}`}
+      >
+        <span className="flex items-center gap-2">
+          {label}
+          {badge != null && <span className="rounded-full bg-gold-400/10 px-1.5 py-0.5 text-[10px] text-gold-200">{badge}</span>}
+        </span>
+        {collapsible && <Arrow className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`} />}
+      </button>
+      {open && <div className="space-y-1">{children}</div>}
+    </div>
+  )
+}
+
+function NavItem({ item, active, onClick }) {
+  const Icon = item.icon
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors ${
+        active
+          ? 'border-gold-400/60 bg-gold-400/10 text-gold-100'
+          : 'border-transparent text-gray-400 hover:border-white/10 hover:bg-white/[0.03] hover:text-gray-200'
+      }`}
+    >
+      {Icon && <Icon className="h-4 w-4 shrink-0" />}
+      {item.label}
+    </button>
   )
 }
 
