@@ -24,6 +24,7 @@ const Terms = lazy(() => import('./pages/Terms.jsx'))
 const Status = lazy(() => import('./pages/Status.jsx'))
 const ThankYou = lazy(() => import('./pages/ThankYou.jsx'))
 const ConsultationConfirmed = lazy(() => import('./pages/ConsultationConfirmed.jsx'))
+const Book = lazy(() => import('./pages/Book.jsx'))
 const ClientPortal = lazy(() => import('./pages/ClientPortal.jsx'))
 const Support = lazy(() => import('./pages/Support.jsx'))
 const Admin = lazy(() => import('./admin/Admin.jsx'))
@@ -54,7 +55,7 @@ export default function App() {
   // The internal admin dashboard and the post-conversion pages are standalone
   // experiences — keep the marketing-site chrome (loader intro, easter egg,
   // sound, smooth-scroll) off of them.
-  const bareRoutes = ['/admin', '/thank-you', '/consultation-confirmed']
+  const bareRoutes = ['/admin', '/thank-you', '/consultation-confirmed', '/book']
   const isBare = bareRoutes.some((r) => pathname.startsWith(r))
 
   return (
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="/status" element={<Status />} />
           <Route path="/thank-you" element={<ThankYou />} />
           <Route path="/consultation-confirmed" element={<ConsultationConfirmed />} />
+          <Route path="/book" element={<Book />} />
           <Route path="/client-portal" element={<ClientPortal />} />
           <Route path="/support" element={<Support />} />
           <Route path="/admin" element={<Admin />} />
