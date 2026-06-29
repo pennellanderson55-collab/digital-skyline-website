@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import ProspectForm from './ProspectForm.jsx'
 import WebsiteIntelligence from './WebsiteIntelligence.jsx'
+import OutreachAI from './OutreachAI.jsx'
 import {
   PROSPECT_STATUSES, prospectStatusStyle, ratingStars, scoreBand,
   normalizeUrl, fmtDate, fmtDateTime,
@@ -201,7 +202,7 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
 
           {tab === 'intelligence' && <WebsiteIntelligence prospect={p} onUpdate={onUpdate} />}
 
-          {tab === 'outreach' && <OutreachPlaceholder prospect={p} />}
+          {tab === 'outreach' && <OutreachAI prospect={p} />}
         </div>
 
         {/* delete confirm */}
@@ -246,19 +247,3 @@ function Row({ label, value }) {
   )
 }
 
-function OutreachPlaceholder() {
-  return (
-    <div className="rounded-2xl border border-dashed border-gold-400/25 bg-gold-400/[0.03] p-8 text-center">
-      <div className="eyebrow mx-auto">Sprint 3</div>
-      <h4 className="mt-4 font-display text-xl font-semibold text-gray-50">Outreach AI</h4>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-gray-400">
-        Coming next: turn a website audit into ready-to-send outreach — personalized emails,
-        follow-up sequences, and call scripts generated from the prospect's biggest opportunities.
-      </p>
-      <p className="mt-3 text-xs text-gray-500">
-        For now, run an audit in <span className="text-gold-200">Website Intelligence</span> — its
-        Sales Talking Points and Follow-up Questions are written for exactly this.
-      </p>
-    </div>
-  )
-}
