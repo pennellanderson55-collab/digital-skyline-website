@@ -90,6 +90,9 @@ export async function saveDraft(supabase, { prospect, audit, type, subject, body
     body,
     tone: 'professional-conversational',
     status: 'Draft',
+    // Enters the Sending Queue as "Ready for Review" (DB default); seed the
+    // recipient from the prospect's email so it's ready to approve/send.
+    recipient_email: prospect.email || null,
   }
   const { data, error } = await supabase.from('outreach_drafts').insert(insert).select().single()
   if (error) throw new Error(error.message)

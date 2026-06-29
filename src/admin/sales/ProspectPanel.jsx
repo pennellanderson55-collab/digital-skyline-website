@@ -307,7 +307,7 @@ export default function ProspectPanel({ prospect, error, onClose, onUpdate, onDe
 
           {tab === 'nowebsite' && !siteExists && <NoWebsiteOpportunity prospect={p} />}
 
-          {tab === 'outreach' && <OutreachAI prospect={p} />}
+          {tab === 'outreach' && <OutreachAI prospect={p} onUpdate={onUpdate} />}
         </div>
 
         {/* delete confirm */}

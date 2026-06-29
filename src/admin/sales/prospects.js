@@ -11,33 +11,51 @@ export { fmtDate, fmtDateTime, num, fmtMoney }
 // Sales pipeline statuses (Sprint 4.1). Order = pipeline progression.
 // Migrated in DB from the old set (New→New Lead, Follow-up→Follow-up Scheduled,
 // Consultation→Consultation Booked, Proposal→Proposal Sent, Client→Won).
+// Sprint 5 superset: Sprint 4.1 stages + the automatic sending pipeline. Kept
+// as one list so nothing existing is hidden and auto-set statuses are selectable.
 export const PROSPECT_STATUSES = [
   'New Lead',
   'Website Audited',
+  'Analyzed',
   'Outreach Started',
+  'Outreach Generated',
   'Contacted',
+  'Approved',
+  'Queued',
+  'Email Sent',
   'Follow-up Scheduled',
   'Consultation Booked',
+  'Consultation Scheduled',
+  'Consultation Completed',
   'Proposal Sent',
   'Negotiating',
   'Won',
+  'Client',
   'Lost',
 ]
 
-// Statuses that close a deal (won or lost) — pipeline progression stops here.
-export const CLOSED_STATUSES = ['Won', 'Lost']
+// Statuses that close a deal — pipeline progression / follow-ups stop here.
+export const CLOSED_STATUSES = ['Won', 'Client', 'Lost']
 
 // Tailwind chip styles per status (premium dark + gold palette, matching ops).
 export const PROSPECT_STATUS_STYLES = {
   'New Lead': 'border-sky-400/40 bg-sky-400/10 text-sky-200',
   'Website Audited': 'border-teal-400/40 bg-teal-400/10 text-teal-200',
+  'Analyzed': 'border-teal-400/40 bg-teal-400/10 text-teal-200',
   'Outreach Started': 'border-blue-400/40 bg-blue-400/10 text-blue-200',
+  'Outreach Generated': 'border-blue-400/40 bg-blue-400/10 text-blue-200',
   'Contacted': 'border-amber-400/40 bg-amber-400/10 text-amber-200',
+  'Approved': 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
+  'Queued': 'border-gold-400/40 bg-gold-400/10 text-gold-200',
+  'Email Sent': 'border-teal-400/40 bg-teal-400/10 text-teal-200',
   'Follow-up Scheduled': 'border-violet-400/40 bg-violet-400/10 text-violet-200',
   'Consultation Booked': 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200',
+  'Consultation Scheduled': 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200',
+  'Consultation Completed': 'border-sky-400/40 bg-sky-400/10 text-sky-200',
   'Proposal Sent': 'border-indigo-400/40 bg-indigo-400/10 text-indigo-200',
   'Negotiating': 'border-fuchsia-400/40 bg-fuchsia-400/10 text-fuchsia-200',
   'Won': 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
+  'Client': 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
   'Lost': 'border-rose-400/30 bg-rose-400/10 text-rose-200',
 }
 

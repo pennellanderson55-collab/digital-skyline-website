@@ -12,6 +12,7 @@ import Prospects from './sales/Prospects.jsx'
 import SalesPipeline from './sales/SalesPipeline.jsx'
 import FollowUps from './sales/FollowUps.jsx'
 import SalesAnalytics from './sales/SalesAnalytics.jsx'
+import SendingQueue from './sales/SendingQueue.jsx'
 import ProspectPanel from './sales/ProspectPanel.jsx'
 
 // Admin navigation — grouped sidebar. Operations = the existing modules;
@@ -28,6 +29,7 @@ const OPS_NAV = [
 const SALES_NAV = [
   { key: 'sales:dashboard', label: 'Dashboard', icon: Activity },
   { key: 'sales:prospects', label: 'Prospects', icon: Scan },
+  { key: 'sales:queue', label: 'Sending Queue', icon: Bolt },
   { key: 'sales:pipeline', label: 'Pipeline', icon: Chart },
   { key: 'sales:followups', label: 'Follow-ups', icon: Bolt },
   { key: 'sales:analytics', label: 'Analytics', icon: Chart },
@@ -488,6 +490,7 @@ function Dashboard({ session }) {
               {nav === 'sales:followups' && (
                 <FollowUps prospects={prospects} onOpen={setActiveProspect} />
               )}
+              {nav === 'sales:queue' && <SendingQueue onProspectUpdate={updateProspect} />}
               {nav === 'sales:analytics' && <SalesAnalytics prospects={prospects} />}
             </>
           ) : loading ? (

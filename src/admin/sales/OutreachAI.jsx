@@ -17,7 +17,10 @@ import { hasWebsite, buildNoWebsiteOpportunity } from './noWebsite.js'
  * never disappear when you leave and return — the tab reloads them from
  * Supabase on open and never regenerates unless you click Generate/Regenerate.
  */
-export default function OutreachAI({ prospect }) {
+// Early pipeline stages we may auto-advance from (never regress a later stage).
+const EARLY_STAGES = ['New Lead', 'Website Audited', 'Analyzed', 'Outreach Started', 'Contacted']
+
+export default function OutreachAI({ prospect, onUpdate }) {
   const [audit, setAudit] = useState(null)
   const [drafts, setDrafts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -67,6 +70,10 @@ export default function OutreachAI({ prospect }) {
       })
       setDrafts((d) => [saved, ...d])
       setCollapsed((c) => ({ ...c, [type]: false })) // keep it visible
+      // Auto-advance the pipeline to "Outreach Generated" (never regress).
+      if (onUpdate && EARLY_STAGES.includes(prospect.status)) {
+        onUpdate(prospect.id, { status: 'Outreach Generated' })
+      }
     } catch (e) {
       setError(e.message)
     } finally {
