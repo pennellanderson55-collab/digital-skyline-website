@@ -45,12 +45,10 @@ export async function loadDrafts(supabase, prospectId) {
   return data || []
 }
 
-// Keep only the newest draft per type for the card view (history still in DB).
-export function latestByType(drafts) {
+// Group all drafts by type (each list newest-first) for the Saved Drafts area.
+export function groupByType(drafts) {
   const map = {}
-  for (const d of drafts) {
-    if (!map[d.type]) map[d.type] = d // drafts already sorted newest-first
-  }
+  for (const d of drafts) (map[d.type] ||= []).push(d) // input already newest-first
   return map
 }
 

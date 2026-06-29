@@ -108,6 +108,55 @@ ${JSON.stringify(findings, null, 2)}
 Return JSON: { "subject": ${TYPES[type].subject ? '"<email subject>"' : '""'}, "body": "<the asset>" }.`
 }
 
+// Generate N additional consultation discovery questions for an audit. Returns
+// { questions: string[] } or { error }. Same cost discipline as outreach:
+// structured findings only, low effort, tight cap.
+const QUESTIONS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    questions: { type: 'array', items: { type: 'string' }, description: 'New discovery questions.' },
+  },
+  required: ['questions'],
+}
+
+export async function generateMoreQuestions({ prospect, audit, count = 5, existing = [] }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return { error: 'ANTHROPIC_API_KEY not set' }
+
+  const ai = audit?.ai || {}
+  const findings = {
+    business_name: prospect?.business_name || 'the business',
+    industry: prospect?.industry || 'unknown',
+    location: [prospect?.city, prospect?.state].filter(Boolean).join(', ') || 'unknown',
+    website_score: audit?.overall_score ?? 'n/a',
+    biggest_weakness: ai.biggest_weakness || null,
+    highest_roi_improvement: ai.highest_roi_improvement || null,
+    suggested_package: ai.suggested_package || null,
+  }
+  const client = new Anthropic({ apiKey })
+  const stream = client.messages.stream({
+    model: MODEL,
+    max_tokens: 800,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: QUESTIONS_SCHEMA } },
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: `Write ${count} additional smart consultation discovery questions for this prospect — tailored to their business and audit findings, consultative, open-ended, and DIFFERENT from these already-asked questions:
+${JSON.stringify(existing)}
+
+Findings:
+${JSON.stringify(findings, null, 2)}
+
+Return JSON: { "questions": [${count} strings] }.` }],
+  })
+  const message = await stream.finalMessage()
+  if (message.stop_reason === 'refusal') return { error: 'AI declined.' }
+  const textBlock = message.content.find((b) => b.type === 'text')
+  if (!textBlock?.text) return { error: 'AI returned no content.' }
+  const out = JSON.parse(textBlock.text)
+  return { questions: (out.questions || []).map((q) => String(q).trim()).filter(Boolean).slice(0, count) }
+}
+
 export async function generateOutreach({ type, prospect, audit }) {
   if (!OUTREACH_TYPES.includes(type)) {
     return { error: `Unknown outreach type: ${type}` }

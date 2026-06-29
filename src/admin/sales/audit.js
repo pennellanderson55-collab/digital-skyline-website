@@ -94,6 +94,42 @@ export function findCachedAudit(history, url) {
   return age < AUDIT_TTL_MS ? hit : null
 }
 
+// Persist per-audit annotations (talking-point notes, consultation answers,
+// AI-generated extra questions) onto the website_audits row. Returns the
+// updated row so the caller can keep history/result in sync.
+export async function saveAnnotations(supabase, auditId, annotations) {
+  if (!supabase || !auditId) throw new Error('Cannot save — audit not persisted yet.')
+  const { data, error } = await supabase
+    .from('website_audits')
+    .update({ annotations })
+    .eq('id', auditId)
+    .select()
+    .single()
+  if (error) {
+    if (/column .*annotations.* does not exist/i.test(error.message)) {
+      throw new Error('annotations column missing — run supabase/sprint3b_audit_annotations.sql.')
+    }
+    throw new Error(error.message)
+  }
+  return data
+}
+
+// Ask the API for N more consultation questions (only on explicit click).
+export async function fetchMoreQuestions({ prospect, audit, count = 5, existing = [] }) {
+  const res = await fetch('/api/generate-questions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prospect: { business_name: prospect?.business_name, industry: prospect?.industry, city: prospect?.city, state: prospect?.state },
+      audit: audit ? { overall_score: audit.overall_score, ai: audit.ai } : {},
+      count, existing,
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || !data.ok) throw new Error(data.error || `Question generation failed (${res.status}).`)
+  return data.questions || []
+}
+
 // Run a full analysis: cache check → API → persist. Returns { audit, cached }.
 export async function runAudit(supabase, { prospect, url, force, history = [] }) {
   const target = normalizeUrl(url)

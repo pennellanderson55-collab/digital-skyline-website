@@ -4,6 +4,7 @@ import { Arrow, Sparkle, Check, Scan } from '../../components/Icons.jsx'
 import { normalizeUrl, fmtDateTime } from './prospects.js'
 import {
   CATEGORIES, auditScore, ANALYZE_STEPS, loadAuditHistory, runAudit, findCachedAudit, summarizeChanges,
+  saveAnnotations, fetchMoreQuestions,
 } from './audit.js'
 
 /**
@@ -32,6 +33,20 @@ export default function WebsiteIntelligence({ prospect, onUpdate }) {
       .catch((e) => { if (alive) setError(e.message) })
     return () => { alive = false; clearInterval(stepTimer.current) }
   }, [prospect.id, prospect.website])
+
+  // Persist updated annotations onto an audit and keep history/result in sync,
+  // so notes/answers survive closing and reopening the panel.
+  const persistAnnotations = async (auditId, annotations) => {
+    try {
+      const updated = await saveAnnotations(supabase, auditId, annotations)
+      setHistory((h) => h.map((a) => (a.id === auditId ? updated : a)))
+      setResult((r) => (r && r.id === auditId ? updated : r))
+      return true
+    } catch (e) {
+      setError(e.message)
+      return false
+    }
+  }
 
   const analyze = async (force) => {
     setError(''); setNotice(''); setLastDiff(null); setRunning(true); setStep(0)
@@ -121,7 +136,9 @@ export default function WebsiteIntelligence({ prospect, onUpdate }) {
 
       {running && <Progress step={step} />}
 
-      {!running && result && <AuditResult audit={result} diff={lastDiff} />}
+      {!running && result && (
+        <AuditResult audit={result} diff={lastDiff} prospect={prospect} onAnnotate={persistAnnotations} />
+      )}
 
       {!running && !result && !error && (
         <div className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-gray-500">
@@ -263,8 +280,8 @@ function AuditResult({ audit, diff }) {
           <Block title="Highest-ROI Improvement" tone="gold">{ai.highest_roi_improvement}</Block>
           <Block title="Estimated Business Impact">{ai.estimated_business_impact}</Block>
 
-          <ListBlock title="Sales Talking Points" items={ai.sales_talking_points} />
-          <ListBlock title="Consultation Follow-up Questions" items={ai.follow_up_questions} />
+          <TalkingPoints audit={audit} onAnnotate={onAnnotate} />
+          <ConsultationQuestions audit={audit} prospect={prospect} onAnnotate={onAnnotate} />
 
           <div className="rounded-xl border border-gold-400/25 bg-gold-400/[0.05] p-4">
             <div className="font-mono text-[11px] uppercase tracking-wider text-gold-300">Suggested Package</div>
@@ -317,18 +334,116 @@ function Block({ title, tone, children }) {
   )
 }
 
-function ListBlock({ title, items }) {
+// Editable, auto-saving note/answer field. Persists on blur (or via the link).
+// Keyed by audit+item upstream so switching audits resets the text.
+function NoteField({ value, placeholder, onSave }) {
+  const [text, setText] = useState(value || '')
+  const [saving, setSaving] = useState(false)
+  const [savedTick, setSavedTick] = useState(false)
+  const dirty = text !== (value || '')
+
+  const save = async () => {
+    if (!dirty || saving) return
+    setSaving(true)
+    const ok = await onSave(text)
+    setSaving(false)
+    if (ok) { setSavedTick(true); setTimeout(() => setSavedTick(false), 1500) }
+  }
+
+  return (
+    <div className="mt-1.5">
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={save}
+        placeholder={placeholder}
+        rows={2}
+        className="w-full resize-y rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:border-gold-400/50 focus:outline-none"
+      />
+      <div className="mt-0.5 text-[10px]">
+        {saving ? <span className="text-gray-500">Saving…</span>
+          : savedTick ? <span className="text-emerald-300">Saved</span>
+          : dirty ? <button onClick={save} className="text-gold-300 hover:underline">Save</button>
+          : <span className="text-gray-600">Saves on blur</span>}
+      </div>
+    </div>
+  )
+}
+
+// Sales talking points, each with a persisted note for what the client said.
+function TalkingPoints({ audit, onAnnotate }) {
+  const items = audit.ai?.sales_talking_points
   if (!Array.isArray(items) || items.length === 0) return null
+  const notes = audit.annotations?.talking_point_notes || {}
+  const saveNote = (key) => async (val) => onAnnotate(audit.id, {
+    ...(audit.annotations || {}),
+    talking_point_notes: { ...notes, [key]: val },
+  })
   return (
     <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-      <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gray-500">{title}</div>
-      <ul className="space-y-2">
+      <div className="mb-3 font-mono text-[11px] uppercase tracking-wider text-gray-500">Sales Talking Points</div>
+      <ul className="space-y-4">
         {items.map((it, i) => (
-          <li key={i} className="flex gap-2.5 text-sm text-gray-200">
-            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
-            <span className="leading-relaxed">{it}</span>
+          <li key={i}>
+            <div className="flex gap-2.5 text-sm text-gray-200">
+              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
+              <span className="leading-relaxed">{it}</span>
+            </div>
+            <NoteField key={`${audit.id}-t${i}`} value={notes[`t${i}`]} placeholder="What did the client say / how did they respond?" onSave={saveNote(`t${i}`)} />
           </li>
         ))}
+      </ul>
+    </div>
+  )
+}
+
+// Consultation questions (original + AI-generated extras), each with a persisted
+// answer field. Extra questions are generated only on explicit click.
+function ConsultationQuestions({ audit, prospect, onAnnotate }) {
+  const original = Array.isArray(audit.ai?.follow_up_questions) ? audit.ai.follow_up_questions : []
+  const extra = Array.isArray(audit.annotations?.extra_questions) ? audit.annotations.extra_questions : []
+  const answers = audit.annotations?.consultation_answers || {}
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  if (original.length === 0 && extra.length === 0) return null
+
+  const saveAnswer = (key) => async (val) => onAnnotate(audit.id, {
+    ...(audit.annotations || {}),
+    consultation_answers: { ...answers, [key]: val },
+  })
+
+  const genMore = async () => {
+    setBusy(true); setErr('')
+    try {
+      const more = await fetchMoreQuestions({ prospect, audit, count: 5, existing: [...original, ...extra] })
+      if (more.length) await onAnnotate(audit.id, { ...(audit.annotations || {}), extra_questions: [...extra, ...more] })
+    } catch (e) { setErr(e.message) } finally { setBusy(false) }
+  }
+
+  const Row = ({ q, k }) => (
+    <li>
+      <div className="flex gap-2.5 text-sm text-gray-200">
+        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
+        <span className="leading-relaxed">{q}</span>
+      </div>
+      <NoteField key={`${audit.id}-${k}`} value={answers[k]} placeholder="Client's answer…" onSave={saveAnswer(k)} />
+    </li>
+  )
+
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-gray-500">Consultation Follow-up Questions</span>
+        <button onClick={genMore} disabled={busy} className="btn-ghost px-3 py-1.5 text-xs disabled:opacity-60">
+          {busy ? 'Generating…' : 'Generate 5 more'}
+        </button>
+      </div>
+      {err && <p className="mb-2 text-xs text-rose-300">{err}</p>}
+      <ul className="space-y-4">
+        {original.map((q, i) => <Row key={`q${i}`} q={q} k={`q${i}`} />)}
+        {extra.length > 0 && <li className="pt-1 font-mono text-[10px] uppercase tracking-wider text-gold-300/80">AI-added questions</li>}
+        {extra.map((q, i) => <Row key={`x${i}`} q={q} k={`x${i}`} />)}
       </ul>
     </div>
   )

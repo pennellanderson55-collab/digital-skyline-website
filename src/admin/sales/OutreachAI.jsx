@@ -3,30 +3,34 @@ import { supabase } from '../../lib/supabase.js'
 import { Sparkle, Check, Arrow } from '../../components/Icons.jsx'
 import { fmtDateTime } from './prospects.js'
 import {
-  OUTREACH_CARDS, outreachStatusStyle, loadDrafts, latestByType,
+  OUTREACH_CARDS, outreachStatusStyle, loadDrafts, groupByType,
   generateDraft, saveDraft, updateDraft,
 } from './outreach.js'
 
 /**
  * Outreach AI tab — turns the latest Website Intelligence audit into
  * personalized outreach assets. Draft generation ONLY: no sending, no Gmail,
- * no bulk. The AI runs only when the user clicks Generate/Regenerate; saved
- * drafts are reloaded from Supabase (no re-spend). Nothing calls AI on mount.
+ * no bulk.
+ *
+ * Persistence: generating an asset AUTO-SAVES it to outreach_drafts, so drafts
+ * never disappear when you leave and return — the tab reloads them from
+ * Supabase on open and never regenerates unless you click Generate/Regenerate.
  */
 export default function OutreachAI({ prospect }) {
   const [audit, setAudit] = useState(null)
   const [drafts, setDrafts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [gen, setGen] = useState({})     // type -> freshly generated (unsaved) asset
-  const [busy, setBusy] = useState({})    // type -> generating?
-  const [saving, setSaving] = useState({})
-  const [copied, setCopied] = useState('')
+  const [busy, setBusy] = useState({})        // type -> generating?
+  const [collapsed, setCollapsed] = useState({}) // type -> collapsed?
+  const [editing, setEditing] = useState({})    // draftId -> { subject, body }
+  const [savingId, setSavingId] = useState(null)
+  const [copiedId, setCopiedId] = useState('')
 
   // Load saved drafts + the latest audit for context. DB reads only — NO AI.
   useEffect(() => {
     let alive = true
-    setLoading(true); setError(''); setGen({}); setCopied('')
+    setLoading(true); setError(''); setEditing({}); setCopiedId('')
     Promise.allSettled([
       loadDrafts(supabase, prospect.id),
       supabase
@@ -43,13 +47,18 @@ export default function OutreachAI({ prospect }) {
     return () => { alive = false }
   }, [prospect.id])
 
-  const savedByType = latestByType(drafts)
+  const byType = groupByType(drafts)
 
+  // Generate ONE asset, then auto-save it so it persists across navigation.
   const handleGenerate = async (type) => {
     setBusy((b) => ({ ...b, [type]: true })); setError('')
     try {
       const result = await generateDraft({ type, prospect, audit })
-      setGen((g) => ({ ...g, [type]: { ...result, audit_id: audit?.id || null } }))
+      const saved = await saveDraft(supabase, {
+        prospect, audit, type, subject: result.subject, body: result.body, model: result.model,
+      })
+      setDrafts((d) => [saved, ...d])
+      setCollapsed((c) => ({ ...c, [type]: false })) // keep it visible
     } catch (e) {
       setError(e.message)
     } finally {
@@ -57,58 +66,54 @@ export default function OutreachAI({ prospect }) {
     }
   }
 
-  const handleSave = async (type) => {
-    const draftData = gen[type]
-    if (!draftData) return
-    setSaving((s) => ({ ...s, [type]: true })); setError('')
+  const patchDraft = async (id, patch) => {
+    setSavingId(id); setError('')
     try {
-      const saved = await saveDraft(supabase, {
-        prospect, audit, type, subject: draftData.subject, body: draftData.body, model: draftData.model,
-      })
-      setDrafts((d) => [saved, ...d])
-      setGen((g) => { const next = { ...g }; delete next[type]; return next }) // now persisted
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setSaving((s) => ({ ...s, [type]: false }))
-    }
+      const updated = await updateDraft(supabase, id, patch)
+      setDrafts((d) => d.map((x) => (x.id === id ? updated : x)))
+      return updated
+    } catch (e) { setError(e.message); return null } finally { setSavingId(null) }
   }
 
-  const handleMarkUsed = async (draft) => {
-    setError('')
-    try {
-      const updated = await updateDraft(supabase, draft.id, {
-        status: draft.status === 'Used' ? 'Draft' : 'Used',
-        used_at: draft.status === 'Used' ? null : new Date().toISOString(),
-      })
-      setDrafts((d) => d.map((x) => (x.id === updated.id ? updated : x)))
-    } catch (e) {
-      setError(e.message)
-    }
+  const startEdit = (d) => setEditing((e) => ({ ...e, [d.id]: { subject: d.subject || '', body: d.body || '' } }))
+  const cancelEdit = (id) => setEditing((e) => { const n = { ...e }; delete n[id]; return n })
+  const changeEdit = (id, field, val) => setEditing((e) => ({ ...e, [id]: { ...e[id], [field]: val } }))
+  const saveEdit = async (id) => {
+    const buf = editing[id]
+    const updated = await patchDraft(id, { subject: buf.subject || null, body: buf.body })
+    if (updated) cancelEdit(id)
   }
 
-  const handleCopy = async (type, content) => {
-    const text = [content.subject ? `Subject: ${content.subject}` : '', content.body].filter(Boolean).join('\n\n')
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(type)
-      setTimeout(() => setCopied((c) => (c === type ? '' : c)), 1600)
-    } catch {
-      setError('Copy failed — your browser blocked clipboard access.')
-    }
+  const markUsed = (d) => patchDraft(d.id, d.status === 'Used'
+    ? { status: 'Draft', used_at: null }
+    : { status: 'Used', used_at: new Date().toISOString() })
+  const archive = (d) => patchDraft(d.id, { status: d.status === 'Archived' ? 'Draft' : 'Archived' })
+
+  const copy = async (d) => {
+    const text = [d.subject ? `Subject: ${d.subject}` : '', d.body].filter(Boolean).join('\n\n')
+    try { await navigator.clipboard.writeText(text); setCopiedId(d.id); setTimeout(() => setCopiedId((c) => (c === d.id ? '' : c)), 1600) }
+    catch { setError('Copy failed — your browser blocked clipboard access.') }
   }
+
+  const setAllCollapsed = (val) => setCollapsed(Object.fromEntries(OUTREACH_CARDS.map((c) => [c.type, val])))
 
   return (
     <div className="space-y-5">
       {/* Header / context */}
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-        <div className="flex items-center gap-2">
-          <Sparkle className="h-4 w-4 text-gold-300" />
-          <h4 className="font-display text-base font-semibold text-gray-50">Outreach AI</h4>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Sparkle className="h-4 w-4 text-gold-300" />
+            <h4 className="font-display text-base font-semibold text-gray-50">Outreach AI</h4>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setAllCollapsed(false)} className="btn-ghost px-2.5 py-1 text-[11px]">Expand all</button>
+            <button onClick={() => setAllCollapsed(true)} className="btn-ghost px-2.5 py-1 text-[11px]">Collapse all</button>
+          </div>
         </div>
         <p className="mt-1.5 text-sm leading-relaxed text-gray-400">
           Generate personalized outreach from this prospect's latest website audit. Draft generation only —
-          nothing is sent. AI runs only when you click <span className="text-gold-200">Generate</span>.
+          nothing is sent. Generating <span className="text-gold-200">auto-saves</span> a draft; AI runs only when you click Generate.
         </p>
         <div className="mt-3 text-xs">
           {audit ? (
@@ -136,15 +141,21 @@ export default function OutreachAI({ prospect }) {
               key={card.type}
               card={card}
               audit={audit}
-              generated={gen[card.type]}
-              saved={savedByType[card.type]}
+              drafts={byType[card.type] || []}
               busy={!!busy[card.type]}
-              saving={!!saving[card.type]}
-              copied={copied === card.type}
+              collapsed={!!collapsed[card.type]}
+              editing={editing}
+              savingId={savingId}
+              copiedId={copiedId}
+              onToggle={() => setCollapsed((c) => ({ ...c, [card.type]: !c[card.type] }))}
               onGenerate={() => handleGenerate(card.type)}
-              onSave={() => handleSave(card.type)}
-              onMarkUsed={handleMarkUsed}
-              onCopy={handleCopy}
+              onStartEdit={startEdit}
+              onChangeEdit={changeEdit}
+              onSaveEdit={saveEdit}
+              onCancelEdit={cancelEdit}
+              onMarkUsed={markUsed}
+              onArchive={archive}
+              onCopy={copy}
             />
           ))}
         </div>
@@ -153,56 +164,105 @@ export default function OutreachAI({ prospect }) {
   )
 }
 
-function OutreachCard({ card, audit, generated, saved, busy, saving, copied, onGenerate, onSave, onMarkUsed, onCopy }) {
-  // Active content = freshly generated (unsaved) if present, else the saved draft.
-  const content = generated || saved
-  const isUnsaved = !!generated
-  const when = generated?.generatedAt || saved?.created_at
-  const srcScore =
-    (saved && audit && saved.audit_id === audit.id) || (generated && audit)
-      ? `${audit.overall_score}/100`
-      : saved?.audit_id ? 'prior audit' : null
-
+function OutreachCard({
+  card, audit, drafts, busy, collapsed, editing, savingId, copiedId,
+  onToggle, onGenerate, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, onMarkUsed, onArchive, onCopy,
+}) {
+  const count = drafts.length
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h5 className="font-display text-sm font-semibold text-gray-100">{card.label}</h5>
-            {saved && !isUnsaved && (
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${outreachStatusStyle(saved.status)}`}>{saved.status}</span>
-            )}
-            {isUnsaved && <span className="rounded-full border border-gold-400/30 bg-gold-400/[0.06] px-2 py-0.5 text-[10px] font-medium text-gold-200">Unsaved</span>}
-          </div>
-          <p className="mt-0.5 text-xs text-gray-500">{card.hint}</p>
-        </div>
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02]">
+      {/* Card header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 p-4">
+        <button onClick={onToggle} className="flex min-w-0 items-center gap-2 text-left">
+          <Arrow className={`h-3.5 w-3.5 text-gold-300 transition-transform ${collapsed ? '' : 'rotate-90'}`} />
+          <span className="font-display text-sm font-semibold text-gray-100">{card.label}</span>
+          {count > 0 && <span className="rounded-full bg-gold-400/10 px-1.5 py-0.5 text-[10px] text-gold-200">{count}</span>}
+        </button>
         <button onClick={onGenerate} disabled={busy} className="btn-gold shrink-0 px-3 py-1.5 text-xs disabled:opacity-60">
-          {busy ? 'Generating…' : content ? 'Regenerate' : (<>Generate <Arrow className="h-3.5 w-3.5" /></>)}
+          {busy ? 'Generating…' : count > 0 ? 'Regenerate' : (<>Generate <Arrow className="h-3.5 w-3.5" /></>)}
         </button>
       </div>
 
-      {content && (
-        <>
-          <div className="mt-3 rounded-lg border border-white/[0.06] bg-ink-950/50 p-3">
-            {content.subject ? <div className="mb-2 text-sm font-semibold text-gray-100">Subject: {content.subject}</div> : null}
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{content.body}</p>
-          </div>
+      {!collapsed && (
+        <div className="space-y-3 px-4 pb-4">
+          <p className="text-xs text-gray-500">{card.hint}</p>
 
+          {count === 0 ? (
+            <p className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-xs text-gray-500">
+              No drafts yet — click Generate.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-gray-600">Saved Drafts</div>
+              {drafts.map((d) => (
+                <DraftRow
+                  key={d.id}
+                  draft={d}
+                  audit={audit}
+                  edit={editing[d.id]}
+                  saving={savingId === d.id}
+                  copied={copiedId === d.id}
+                  onStartEdit={() => onStartEdit(d)}
+                  onChangeEdit={(field, val) => onChangeEdit(d.id, field, val)}
+                  onSaveEdit={() => onSaveEdit(d.id)}
+                  onCancelEdit={() => onCancelEdit(d.id)}
+                  onMarkUsed={() => onMarkUsed(d)}
+                  onArchive={() => onArchive(d)}
+                  onCopy={() => onCopy(d)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DraftRow({ draft, audit, edit, saving, copied, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, onMarkUsed, onArchive, onCopy }) {
+  const isEditing = !!edit
+  const archived = draft.status === 'Archived'
+  const srcScore = audit && draft.audit_id === audit.id ? `${audit.overall_score}/100` : draft.audit_id ? 'prior audit' : null
+
+  return (
+    <div className={`rounded-lg border p-3 ${archived ? 'border-white/[0.05] bg-white/[0.01] opacity-70' : 'border-white/[0.07] bg-ink-950/40'}`}>
+      <div className="mb-2 flex items-center gap-2">
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${outreachStatusStyle(draft.status)}`}>{draft.status}</span>
+        <span className="ml-auto font-mono text-[10px] text-gray-600">
+          {fmtDateTime(draft.created_at)}{srcScore ? ` · audit ${srcScore}` : ''}
+        </span>
+      </div>
+
+      {isEditing ? (
+        <div className="space-y-2">
+          {draft.subject != null && (
+            <input
+              value={edit.subject}
+              onChange={(e) => onChangeEdit('subject', e.target.value)}
+              placeholder="Subject"
+              className="w-full rounded-lg border border-white/10 bg-ink-950/60 px-3 py-2 text-sm text-gray-100 focus:border-gold-400/50 focus:outline-none"
+            />
+          )}
+          <textarea
+            value={edit.body}
+            onChange={(e) => onChangeEdit('body', e.target.value)}
+            rows={6}
+            className="w-full resize-y rounded-lg border border-white/10 bg-ink-950/60 px-3 py-2 text-sm text-gray-200 focus:border-gold-400/50 focus:outline-none"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button onClick={onSaveEdit} disabled={saving} className="btn-gold px-3 py-1.5 text-xs disabled:opacity-60">{saving ? 'Saving…' : 'Save Changes'}</button>
+            <button onClick={onCancelEdit} className="btn-ghost px-3 py-1.5 text-xs">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {draft.subject ? <div className="mb-1 text-sm font-semibold text-gray-100">Subject: {draft.subject}</div> : null}
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{draft.body}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button onClick={() => onCopy(card.type, content)} className="btn-ghost px-3 py-1.5 text-xs">
-              {copied ? (<><Check className="h-3.5 w-3.5" /> Copied</>) : 'Copy'}
-            </button>
-            <button onClick={onSave} disabled={!isUnsaved || saving} className="btn-ghost px-3 py-1.5 text-xs disabled:opacity-40">
-              {saving ? 'Saving…' : isUnsaved ? 'Save Draft' : 'Saved'}
-            </button>
-            {saved && !isUnsaved && (
-              <button onClick={() => onMarkUsed(saved)} className="btn-ghost px-3 py-1.5 text-xs">
-                {saved.status === 'Used' ? 'Mark Unused' : 'Mark Used'}
-              </button>
-            )}
-            <span className="ml-auto font-mono text-[10px] text-gray-600">
-              {when ? fmtDateTime(when) : ''}{srcScore ? ` · audit ${srcScore}` : ''}
-            </span>
+            <button onClick={onCopy} className="btn-ghost px-3 py-1.5 text-xs">{copied ? (<><Check className="h-3.5 w-3.5" /> Copied</>) : 'Copy'}</button>
+            <button onClick={onStartEdit} className="btn-ghost px-3 py-1.5 text-xs">Edit</button>
+            <button onClick={onMarkUsed} className="btn-ghost px-3 py-1.5 text-xs">{draft.status === 'Used' ? 'Mark Unused' : 'Mark Used'}</button>
+            <button onClick={onArchive} className="btn-ghost px-3 py-1.5 text-xs">{archived ? 'Unarchive' : 'Archive'}</button>
           </div>
         </>
       )}
