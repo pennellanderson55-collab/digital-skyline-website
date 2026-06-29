@@ -10,7 +10,7 @@ export default function FollowUps({ prospects, onOpen }) {
   const groups = useMemo(() => {
     const today = toISODate(new Date())
     const active = prospects.filter(
-      (p) => p.next_follow_up && p.status !== 'Client' && p.status !== 'Lost'
+      (p) => p.next_follow_up && p.status !== 'Won' && p.status !== 'Lost'
     ).sort((a, b) => new Date(a.next_follow_up) - new Date(b.next_follow_up))
 
     return {

@@ -39,7 +39,7 @@ export default function SalesDashboard({ prospects, consultations, clients, proj
     const recentActivity = events.filter((e) => e.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 8)
 
     const upcomingFollowUps = prospects
-      .filter((p) => p.next_follow_up && p.status !== 'Client' && p.status !== 'Lost')
+      .filter((p) => p.next_follow_up && p.status !== 'Won' && p.status !== 'Lost')
       .sort((a, b) => new Date(a.next_follow_up) - new Date(b.next_follow_up))
       .slice(0, 6)
 

@@ -4,7 +4,8 @@ import WebsiteIntelligence from './WebsiteIntelligence.jsx'
 import OutreachAI from './OutreachAI.jsx'
 import {
   PROSPECT_STATUSES, prospectStatusStyle, ratingStars, scoreBand,
-  normalizeUrl, fmtDate, fmtDateTime,
+  normalizeUrl, fmtDate, fmtDateTime, fmtMoney,
+  expectedRevenue, clampProbability, parseDealValue,
 } from './prospects.js'
 
 const PANEL_TABS = [
@@ -27,11 +28,21 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
   const [followDate, setFollowDate] = useState(prospect.next_follow_up || '')
   const [convertNotice, setConvertNotice] = useState(false)
 
+  // Sales Pipeline fields — local so Expected Revenue updates instantly as you
+  // type; persisted via onUpdate on change/blur.
+  const [dealValue, setDealValue] = useState(prospect.deal_value ?? '')
+  const [probability, setProbability] = useState(prospect.probability ?? '')
+  const [nextFollowUp, setNextFollowUp] = useState(prospect.next_follow_up || '')
+  const [lostReason, setLostReason] = useState(prospect.lost_reason || '')
+  const [pipeErr, setPipeErr] = useState('')
+
   // Reset transient UI whenever a different prospect is opened.
   useEffect(() => {
     setTab('overview'); setEditing(false); setConfirmDel(false); setScheduling(false)
     setFollowDate(prospect.next_follow_up || ''); setConvertNotice(false)
-  }, [prospect.id, prospect.next_follow_up])
+    setDealValue(prospect.deal_value ?? ''); setProbability(prospect.probability ?? '')
+    setNextFollowUp(prospect.next_follow_up || ''); setLostReason(prospect.lost_reason || ''); setPipeErr('')
+  }, [prospect.id, prospect.next_follow_up, prospect.deal_value, prospect.probability, prospect.lost_reason])
 
   // Esc closes; lock background scroll while open.
   useEffect(() => {
@@ -50,6 +61,33 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
   }
 
   const setStatus = (status) => onUpdate(prospect.id, { status })
+
+  // ── Sales Pipeline persistence (normal DB updates — no AI, no extra calls) ──
+  const saveDeal = () => {
+    if (dealValue !== '' && (Number.isNaN(Number(dealValue)) || Number(dealValue) < 0)) {
+      setPipeErr('Deal value must be a number ≥ 0.'); return
+    }
+    setPipeErr(''); onUpdate(prospect.id, { deal_value: parseDealValue(dealValue) })
+  }
+  const saveProbability = () => {
+    if (probability !== '' && (Number(probability) < 0 || Number(probability) > 100)) {
+      setPipeErr('Probability must be between 0 and 100.'); return
+    }
+    setPipeErr(''); onUpdate(prospect.id, { probability: clampProbability(probability) })
+  }
+  const saveNextFollowUp = (val) => {
+    setNextFollowUp(val)
+    onUpdate(prospect.id, { next_follow_up: val || null })
+  }
+  const saveLostReason = () => onUpdate(prospect.id, { lost_reason: lostReason.trim() || null })
+
+  // Quick actions — each sets the status (+ the relevant timestamp).
+  const now = () => new Date().toISOString()
+  const markContacted = () => onUpdate(prospect.id, { status: 'Contacted', last_contacted_at: now(), last_contacted: now() })
+  const quickSchedule = () => onUpdate(prospect.id, { status: 'Follow-up Scheduled' })
+  const markProposalSent = () => onUpdate(prospect.id, { status: 'Proposal Sent', proposal_sent_at: now() })
+  const markWon = () => onUpdate(prospect.id, { status: 'Won', closed_at: now() })
+  const markLost = () => onUpdate(prospect.id, { status: 'Lost', closed_at: now() })
 
   const saveFollowUp = async () => {
     setBusy(true)
@@ -135,14 +173,16 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
               {convertNotice && (
                 <div className="mt-4 rounded-xl border border-gold-400/20 bg-gold-400/[0.04] p-4 text-sm text-gold-100">
                   Converting a prospect into a full client + project record arrives in a later sprint.
-                  For now, set the status to <span className="font-semibold">Client</span> to mark them won.
+                  For now, use <span className="font-semibold">Mark Won</span> to close them.
                   <button onClick={() => setConvertNotice(false)} className="mt-2 block text-xs text-gray-400 underline">Dismiss</button>
                 </div>
               )}
 
-              {/* status quick-set */}
-              <div className="mt-6">
-                <SectionLabel>Status</SectionLabel>
+              {/* ── Sales Pipeline ───────────────────────────────────────── */}
+              <div className="mt-6 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+                <SectionLabel>Sales Pipeline</SectionLabel>
+
+                {/* Status badges */}
                 <div className="flex flex-wrap gap-2">
                   {PROSPECT_STATUSES.map((s) => (
                     <button key={s} onClick={() => setStatus(s)}
@@ -150,6 +190,50 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
                         s === p.status ? prospectStatusStyle(s) : 'border-white/10 text-gray-400 hover:border-gold-400/40'
                       }`}>{s}</button>
                   ))}
+                </div>
+
+                {/* Deal value · Probability · Next follow-up · Expected revenue */}
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <PipeField label="Deal Value ($)">
+                    <input type="number" min="0" step="100" value={dealValue}
+                      onChange={(e) => setDealValue(e.target.value)} onBlur={saveDeal}
+                      placeholder="3000" className={pipeInputCls} />
+                  </PipeField>
+                  <PipeField label="Probability (%)">
+                    <input type="number" min="0" max="100" value={probability}
+                      onChange={(e) => setProbability(e.target.value)} onBlur={saveProbability}
+                      placeholder="70" className={pipeInputCls} />
+                  </PipeField>
+                  <PipeField label="Next Follow-up">
+                    <input type="date" value={nextFollowUp}
+                      onChange={(e) => saveNextFollowUp(e.target.value)} className={pipeInputCls} />
+                  </PipeField>
+                  <PipeField label="Expected Revenue">
+                    <div className="rounded-xl border border-gold-400/25 bg-gold-400/[0.05] px-4 py-2.5 text-sm font-semibold text-gold-100">
+                      {fmtMoney(expectedRevenue(dealValue, probability))}
+                    </div>
+                  </PipeField>
+                </div>
+                {pipeErr && <p className="mt-2 text-xs text-rose-400">{pipeErr}</p>}
+
+                {p.status === 'Lost' && (
+                  <div className="mt-4">
+                    <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-gray-400">Lost reason</label>
+                    <input value={lostReason} onChange={(e) => setLostReason(e.target.value)} onBlur={saveLostReason}
+                      placeholder="Why was this lost? (optional)" className={pipeInputCls} />
+                  </div>
+                )}
+
+                {/* Quick actions */}
+                <div className="mt-4">
+                  <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gray-500">Quick Actions</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={markContacted} className="btn-ghost px-3 py-1.5 text-xs">Mark Contacted</button>
+                    <button onClick={quickSchedule} className="btn-ghost px-3 py-1.5 text-xs">Schedule Follow-up</button>
+                    <button onClick={markProposalSent} className="btn-ghost px-3 py-1.5 text-xs">Proposal Sent</button>
+                    <button onClick={markWon} className="rounded-full border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-1.5 text-xs font-medium text-emerald-200 transition-colors hover:border-emerald-400/60">Mark Won</button>
+                    <button onClick={markLost} className="rounded-full border border-rose-400/30 bg-rose-400/[0.06] px-3 py-1.5 text-xs font-medium text-rose-200 transition-colors hover:border-rose-400/60">Mark Lost</button>
+                  </div>
                 </div>
               </div>
 
@@ -228,6 +312,18 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
 const SectionLabel = ({ children }) => (
   <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-gray-500">{children}</div>
 )
+
+const pipeInputCls =
+  'w-full rounded-xl border border-white/10 bg-ink-950/60 px-4 py-2.5 text-sm text-gray-100 placeholder:text-gray-600 focus:border-gold-400/60 focus:outline-none'
+
+function PipeField({ label, children }) {
+  return (
+    <div>
+      <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-gray-400">{label}</label>
+      {children}
+    </div>
+  )
+}
 
 function Group({ title, children }) {
   return (

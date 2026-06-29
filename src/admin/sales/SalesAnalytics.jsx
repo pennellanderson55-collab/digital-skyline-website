@@ -29,8 +29,11 @@ export default function SalesAnalytics({ prospects }) {
       return 'High (70+)'
     }
 
-    // Simple funnel: how far prospects have progressed.
-    const order = ['New', 'Contacted', 'Follow-up', 'Consultation', 'Proposal', 'Client']
+    // Simple funnel: how far prospects have progressed (closed-lost excluded).
+    const order = [
+      'New Lead', 'Website Audited', 'Outreach Started', 'Contacted', 'Follow-up Scheduled',
+      'Consultation Booked', 'Proposal Sent', 'Negotiating', 'Won',
+    ]
     const funnel = order.map((s) => [s, prospects.filter((p) => p.status === s).length])
 
     return {

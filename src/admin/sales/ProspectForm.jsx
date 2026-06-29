@@ -13,7 +13,7 @@ const blank = {
   phone: '', email: '', website: '',
   address: '', city: '', state: '',
   google_reviews: '', google_rating: '', website_score: '',
-  status: 'New', next_follow_up: '', last_contacted: '', notes: '',
+  status: 'New Lead', deal_value: '', probability: '', next_follow_up: '', last_contacted: '', notes: '',
 }
 
 const fromRow = (row) => ({
@@ -45,6 +45,10 @@ export default function ProspectForm({ initial, onSubmit, onCancel, submitLabel 
     if (form.website_score !== '' && (Number(form.website_score) < 0 || Number(form.website_score) > 100))
       er.website_score = '0–100'
     if (form.google_reviews !== '' && Number(form.google_reviews) < 0) er.google_reviews = '≥ 0'
+    if (form.probability !== '' && (Number(form.probability) < 0 || Number(form.probability) > 100))
+      er.probability = '0–100'
+    if (form.deal_value !== '' && (Number.isNaN(Number(form.deal_value)) || Number(form.deal_value) < 0))
+      er.deal_value = 'Numeric ≥ 0'
     setErrors(er)
     return Object.keys(er).length === 0
   }
@@ -71,7 +75,9 @@ export default function ProspectForm({ initial, onSubmit, onCancel, submitLabel 
       google_reviews: numOrNull(form.google_reviews),
       google_rating: numOrNull(form.google_rating),
       website_score: numOrNull(form.website_score),
-      status: form.status || 'New',
+      status: form.status || 'New Lead',
+      deal_value: numOrNull(form.deal_value),
+      probability: form.probability === '' ? null : Math.round(Number(form.probability)),
       next_follow_up: form.next_follow_up || null,
       last_contacted: form.last_contacted ? `${form.last_contacted}T12:00:00Z` : null,
       notes: strOrNull(form.notes),
@@ -107,6 +113,8 @@ export default function ProspectForm({ initial, onSubmit, onCancel, submitLabel 
 
       <Section title="Pipeline">
         <SelectField label="Status" value={form.status} onChange={set('status')} options={PROSPECT_STATUSES} />
+        <Field label="Deal value ($)" type="number" min="0" step="100" value={form.deal_value} onChange={set('deal_value')} error={errors.deal_value} placeholder="3000" />
+        <Field label="Probability (%)" type="number" min="0" max="100" value={form.probability} onChange={set('probability')} error={errors.probability} placeholder="70" />
         <Field label="Last contacted" type="date" value={form.last_contacted} onChange={set('last_contacted')} />
         <Field label="Next follow-up" type="date" value={form.next_follow_up} onChange={set('next_follow_up')} />
       </Section>

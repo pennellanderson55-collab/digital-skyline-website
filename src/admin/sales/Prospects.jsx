@@ -5,7 +5,7 @@ import ProspectPanel from './ProspectPanel.jsx'
 import ProspectForm from './ProspectForm.jsx'
 import {
   PROSPECT_STATUSES, prospectStatusStyle, INDUSTRIES, scoreBand, ratingStars,
-  fmtDate, isFollowUpDue,
+  fmtDate, isFollowUpDue, fmtMoney,
 } from './prospects.js'
 
 const SORTS = ['Newest', 'Oldest', 'Name A–Z', 'Website Score ↑', 'Rating ↓']
@@ -104,7 +104,7 @@ export default function Prospects({ prospects, loading, error, onAdd, onUpdate, 
               <thead>
                 <tr className="text-left font-mono text-[11px] uppercase tracking-wider text-gray-500">
                   <Th>Business</Th><Th>Industry</Th><Th>Location</Th><Th>Rating</Th>
-                  <Th>Score</Th><Th>Status</Th><Th>Next Follow-up</Th><Th>Added</Th>
+                  <Th>Score</Th><Th>Deal</Th><Th>Status</Th><Th>Next Follow-up</Th><Th>Added</Th>
                 </tr>
               </thead>
               <tbody>
@@ -122,6 +122,7 @@ export default function Prospects({ prospects, loading, error, onAdd, onUpdate, 
                       <Td>{[p.city, p.state].filter(Boolean).join(', ') || '—'}</Td>
                       <Td className="text-amber-200">{p.google_rating ? <span title={`${p.google_rating} from ${p.google_reviews ?? '?'} reviews`}>{ratingStars(p.google_rating)}</span> : '—'}</Td>
                       <Td><span className={band.cls}>{p.website_score == null ? '—' : `${p.website_score}`}</span></Td>
+                      <Td className="font-mono text-xs text-gray-300">{p.deal_value == null ? '—' : fmtMoney(p.deal_value)}</Td>
                       <Td><span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${prospectStatusStyle(p.status)}`}>{p.status}</span></Td>
                       <Td className={due ? 'font-medium text-rose-300' : 'font-mono text-xs text-gray-500'}>
                         {p.next_follow_up ? fmtDate(p.next_follow_up) : '—'}{due ? ' • due' : ''}
@@ -131,7 +132,7 @@ export default function Prospects({ prospects, loading, error, onAdd, onUpdate, 
                   )
                 })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-500">No prospects match your filters.</td></tr>
+                  <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-500">No prospects match your filters.</td></tr>
                 )}
               </tbody>
             </table>

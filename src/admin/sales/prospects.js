@@ -4,34 +4,70 @@
 // modules. Mirrors the conventions in ../ops.js so the OS feels like one app.
 // ============================================================================
 
-import { fmtDate, fmtDateTime, num } from '../ops.js'
+import { fmtDate, fmtDateTime, num, fmtMoney } from '../ops.js'
 
-export { fmtDate, fmtDateTime, num }
+export { fmtDate, fmtDateTime, num, fmtMoney }
 
-// Prospect pipeline statuses. Order = left→right on the sales Pipeline board.
+// Sales pipeline statuses (Sprint 4.1). Order = pipeline progression.
+// Migrated in DB from the old set (New→New Lead, Follow-up→Follow-up Scheduled,
+// Consultation→Consultation Booked, Proposal→Proposal Sent, Client→Won).
 export const PROSPECT_STATUSES = [
-  'New',
+  'New Lead',
+  'Website Audited',
+  'Outreach Started',
   'Contacted',
-  'Follow-up',
-  'Consultation',
-  'Proposal',
-  'Client',
+  'Follow-up Scheduled',
+  'Consultation Booked',
+  'Proposal Sent',
+  'Negotiating',
+  'Won',
   'Lost',
 ]
 
+// Statuses that close a deal (won or lost) — pipeline progression stops here.
+export const CLOSED_STATUSES = ['Won', 'Lost']
+
 // Tailwind chip styles per status (premium dark + gold palette, matching ops).
 export const PROSPECT_STATUS_STYLES = {
-  'New': 'border-sky-400/40 bg-sky-400/10 text-sky-200',
+  'New Lead': 'border-sky-400/40 bg-sky-400/10 text-sky-200',
+  'Website Audited': 'border-teal-400/40 bg-teal-400/10 text-teal-200',
+  'Outreach Started': 'border-blue-400/40 bg-blue-400/10 text-blue-200',
   'Contacted': 'border-amber-400/40 bg-amber-400/10 text-amber-200',
-  'Follow-up': 'border-violet-400/40 bg-violet-400/10 text-violet-200',
-  'Consultation': 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200',
-  'Proposal': 'border-indigo-400/40 bg-indigo-400/10 text-indigo-200',
-  'Client': 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
-  'Lost': 'border-gray-400/30 bg-gray-400/10 text-gray-300',
+  'Follow-up Scheduled': 'border-violet-400/40 bg-violet-400/10 text-violet-200',
+  'Consultation Booked': 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200',
+  'Proposal Sent': 'border-indigo-400/40 bg-indigo-400/10 text-indigo-200',
+  'Negotiating': 'border-fuchsia-400/40 bg-fuchsia-400/10 text-fuchsia-200',
+  'Won': 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
+  'Lost': 'border-rose-400/30 bg-rose-400/10 text-rose-200',
 }
 
 export const prospectStatusStyle = (s) =>
   PROSPECT_STATUS_STYLES[s] || 'border-white/10 bg-white/[0.03] text-gray-200'
+
+// Expected Revenue = deal value × probability%. Returns a number (0 if either
+// is missing/invalid). Computed in the UI — no DB column, always live.
+export const expectedRevenue = (dealValue, probability) => {
+  const d = Number(dealValue)
+  const p = Number(probability)
+  if (!Number.isFinite(d) || !Number.isFinite(p)) return 0
+  return Math.round(d * (Math.max(0, Math.min(100, p)) / 100))
+}
+
+// Clamp a probability to the valid 0–100 integer range (or null when blank).
+export const clampProbability = (v) => {
+  if (v === '' || v == null) return null
+  const n = Math.round(Number(v))
+  if (!Number.isFinite(n)) return null
+  return Math.max(0, Math.min(100, n))
+}
+
+// Parse a deal value to a non-negative number (or null when blank/invalid).
+export const parseDealValue = (v) => {
+  if (v === '' || v == null) return null
+  const n = Number(v)
+  if (!Number.isFinite(n) || n < 0) return null
+  return n
+}
 
 // Suggested industries (free-text inputs use these as a datalist; filters too).
 export const INDUSTRIES = [
@@ -95,7 +131,7 @@ export const ratingStars = (rating) => {
 // A date is "due" if it is today or in the past (and the prospect isn't done).
 export const isFollowUpDue = (p, today = new Date()) => {
   if (!p?.next_follow_up) return false
-  if (p.status === 'Client' || p.status === 'Lost') return false
+  if (CLOSED_STATUSES.includes(p.status)) return false
   const d = new Date(`${p.next_follow_up}T23:59:59`)
   return d.getTime() <= today.getTime()
 }
