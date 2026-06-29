@@ -203,7 +203,7 @@ function Progress({ step }) {
 
 /* -------------------------------------------------------------- result */
 
-function AuditResult({ audit, diff }) {
+function AuditResult({ audit, diff, prospect, onAnnotate }) {
   const cats = audit.category_scores || {}
   const ai = audit.ai
   const s = audit.signals || {}
