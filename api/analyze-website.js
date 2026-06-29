@@ -73,15 +73,6 @@ export default async function handler(req, res) {
 
   console.log(`[analyze-website] done — score ${overall}/100, ai=${ai ? 'yes' : 'no'}, pagespeed=${pageSpeed != null}`)
 
-  // TEMPORARY runtime debugging — never exposes the key itself, only a boolean.
-  // Remove after diagnosing ANTHROPIC_API_KEY availability on Vercel.
-  const _debug = {
-    anthropicKeyPresent: Boolean(process.env.ANTHROPIC_API_KEY),
-    vercelEnv: process.env.VERCEL_ENV ?? null,
-    nodeEnv: process.env.NODE_ENV ?? null,
-    deploymentUrl: process.env.VERCEL_URL ?? null,
-  }
-
   return res.status(200).json({
     ok: true,
     url: target,
@@ -94,6 +85,5 @@ export default async function handler(req, res) {
     aiModel,
     aiSkipped,
     analyzedAt: new Date().toISOString(),
-    _debug,
   })
 }
