@@ -252,9 +252,22 @@ function Dashboard({ session }) {
     if (nav.startsWith('sales:') && !prospectsLoaded && !prospectsLoading) loadProspects()
   }, [nav, prospectsLoaded, prospectsLoading])
 
+  // Make DB rejections actionable instead of a silent revert. The most common
+  // cause after Sprint 4.1 is the pipeline migration not being applied yet:
+  // new status values / pipeline columns are rejected by the old schema.
+  const friendlyProspectError = (msg = '') => {
+    if (/check constraint .*status|violates check constraint .*status/i.test(msg))
+      return 'That status was rejected by the database. Run supabase/sprint4_pipeline.sql in Supabase to enable the new pipeline statuses, then Refresh.'
+    if (/column .* does not exist/i.test(msg))
+      return 'A pipeline column is missing. Run supabase/sprint4_pipeline.sql in Supabase, then Refresh.'
+    if (/violates check constraint/i.test(msg))
+      return `${msg} — if this is a new pipeline field, run supabase/sprint4_pipeline.sql, then Refresh.`
+    return msg
+  }
+
   const addProspect = async (patch) => {
     const { data, error: e } = await supabase.from('prospects').insert(patch).select().single()
-    if (e) { setProspectsError(e.message); return }
+    if (e) { setProspectsError(friendlyProspectError(e.message)); return }
     setProspects((ps) => [data, ...ps])
   }
 
@@ -262,7 +275,7 @@ function Dashboard({ session }) {
     // Optimistic — reflect immediately, reconcile/revert on error.
     setProspects((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)))
     const { data, error: e } = await supabase.from('prospects').update(patch).eq('id', id).select().single()
-    if (e) { setProspectsError(e.message); loadProspects(); return }
+    if (e) { setProspectsError(friendlyProspectError(e.message)); loadProspects(); return }
     if (data) setProspects((ps) => ps.map((p) => (p.id === id ? data : p)))
   }
 

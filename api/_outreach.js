@@ -72,16 +72,48 @@ Hard rules:
 - Tone: professional, warm, conversational. Never spammy, never robotic, never overly technical.
 - NO exaggerated or fabricated promises. Never guarantee leads, sales, traffic, rankings or revenue. No "I guarantee you more leads."
 - No fake claims, no invented statistics, no fake urgency, no manipulative pressure.
-- Be specific to THIS business using the audit findings provided. Reference real details (their industry, city, the actual weakness/opportunity).
-- Trust the detected signals. If a phone/CTA/booking form WAS detected, don't claim it's missing. If scan confidence is low, stay general and don't assert strong claims about what's missing.
-- Keep it tight and natural. Write only the asset requested — no preamble, no notes, no explanation of what you wrote.`
+- Be specific to THIS business using the findings provided. Reference real details (their industry, city, rating/reviews, the actual opportunity).
+- Keep it tight and natural. Write only the asset requested — no preamble, no notes, no explanation of what you wrote.
 
-function buildUserPrompt({ type, prospect = {}, audit = {} }) {
+There are TWO modes — follow the one indicated in the prompt:
+- WEBSITE AUDIT mode: the prospect HAS a website that was audited. Trust the detected signals; if a phone/CTA/form WAS detected, don't claim it's missing. If scan confidence is low, stay general about what's "missing."
+- NO-WEBSITE mode: the prospect has NO website at all. NEVER mention website improvements, redesigns, audits, fixes, or problems with an existing site — they don't have one. Frame everything as the opportunity to establish their first professional online presence, turning their existing reputation (rating/reviews/word-of-mouth) into customers who find them online.`
+
+function buildUserPrompt({ type, prospect = {}, audit = {}, noWebsite = null }) {
+  const loc = [prospect.city, prospect.state].filter(Boolean).join(', ')
+
+  // NO-WEBSITE mode — context is the deterministic opportunity analysis, NOT an
+  // audit. Never reference an existing website.
+  if (noWebsite) {
+    const findings = {
+      mode: 'NO-WEBSITE',
+      has_website: false,
+      business_name: prospect.business_name || 'the business',
+      industry: prospect.industry || 'unknown',
+      location: loc || 'unknown',
+      google_rating: prospect.google_rating ?? null,
+      google_reviews: prospect.google_reviews ?? null,
+      opportunity_score: noWebsite.score ?? null,
+      why_opportunity: noWebsite.why || null,
+      recommended_package: noWebsite.recommended_package || null,
+    }
+    return `Mode: NO-WEBSITE (the prospect has NO website — never mention improving, fixing, or auditing a site).
+Asset to write: ${TYPES[type].label}
+
+${TYPES[type].instruction}
+
+Prospect + opportunity findings (use these; do not invent others):
+${JSON.stringify(findings, null, 2)}
+
+Return JSON: { "subject": ${TYPES[type].subject ? '"<email subject>"' : '""'}, "body": "<the asset>" }.`
+  }
+
+  // WEBSITE AUDIT mode — STRUCTURED findings only, never the website HTML.
   const ai = audit.ai || {}
   const s = audit.signals || {}
-  const loc = [prospect.city, prospect.state].filter(Boolean).join(', ')
-  // STRUCTURED findings only — never the website HTML.
   const findings = {
+    mode: 'WEBSITE-AUDIT',
+    has_website: true,
     business_name: prospect.business_name || 'the business',
     industry: prospect.industry || 'unknown',
     location: loc || 'unknown',
@@ -98,7 +130,8 @@ function buildUserPrompt({ type, prospect = {}, audit = {} }) {
     },
     scan_confidence: s.confidence || 'high',
   }
-  return `Asset to write: ${TYPES[type].label}
+  return `Mode: WEBSITE-AUDIT.
+Asset to write: ${TYPES[type].label}
 
 ${TYPES[type].instruction}
 
@@ -157,7 +190,7 @@ Return JSON: { "questions": [${count} strings] }.` }],
   return { questions: (out.questions || []).map((q) => String(q).trim()).filter(Boolean).slice(0, count) }
 }
 
-export async function generateOutreach({ type, prospect, audit }) {
+export async function generateOutreach({ type, prospect, audit, noWebsite }) {
   if (!OUTREACH_TYPES.includes(type)) {
     return { error: `Unknown outreach type: ${type}` }
   }
@@ -173,7 +206,7 @@ export async function generateOutreach({ type, prospect, audit }) {
     thinking: { type: 'adaptive' },
     output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
     system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: buildUserPrompt({ type, prospect, audit }) }],
+    messages: [{ role: 'user', content: buildUserPrompt({ type, prospect, audit, noWebsite }) }],
   })
 
   const message = await stream.finalMessage()

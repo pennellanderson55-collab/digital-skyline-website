@@ -22,7 +22,7 @@ export default async function handler(req, res) {
 
   let body = req.body
   if (typeof body === 'string') { try { body = JSON.parse(body) } catch { body = {} } }
-  const { type, prospect, audit } = body || {}
+  const { type, prospect, audit, noWebsite } = body || {}
 
   if (!type || !OUTREACH_TYPES.includes(type)) {
     return res.status(400).json({ ok: false, error: `Provide a valid "type" (${OUTREACH_TYPES.join(', ')}).` })
@@ -31,10 +31,10 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'Missing prospect context.' })
   }
 
-  console.log(`[generate-outreach] type=${type} for "${prospect.business_name}"`)
+  console.log(`[generate-outreach] type=${type} mode=${noWebsite ? 'no-website' : 'website-audit'} for "${prospect.business_name}"`)
 
   try {
-    const result = await generateOutreach({ type, prospect, audit: audit || {} })
+    const result = await generateOutreach({ type, prospect, audit: audit || {}, noWebsite: noWebsite || null })
     if (result.error) {
       return res.status(502).json({ ok: false, error: result.error })
     }

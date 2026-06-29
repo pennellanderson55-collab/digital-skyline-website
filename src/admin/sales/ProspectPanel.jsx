@@ -1,16 +1,23 @@
 import { useEffect, useState } from 'react'
 import ProspectForm from './ProspectForm.jsx'
 import WebsiteIntelligence from './WebsiteIntelligence.jsx'
+import NoWebsiteOpportunity from './NoWebsiteOpportunity.jsx'
 import OutreachAI from './OutreachAI.jsx'
+import { hasWebsite } from './noWebsite.js'
 import {
   PROSPECT_STATUSES, prospectStatusStyle, ratingStars, scoreBand,
   normalizeUrl, fmtDate, fmtDateTime, fmtMoney,
   expectedRevenue, clampProbability, parseDealValue,
 } from './prospects.js'
 
-const PANEL_TABS = [
+// The middle tab depends on whether the prospect has a website:
+//  - website  → Website Intelligence (audit)
+//  - none     → No Website Opportunity (deterministic, Lead-Finder ready)
+const panelTabs = (siteExists) => [
   { key: 'overview', label: 'Overview' },
-  { key: 'intelligence', label: 'Website Intelligence' },
+  siteExists
+    ? { key: 'intelligence', label: 'Website Intelligence' }
+    : { key: 'nowebsite', label: 'No Website Opportunity' },
   { key: 'outreach', label: 'Outreach AI' },
 ]
 
@@ -19,7 +26,7 @@ const PANEL_TABS = [
  * Sections: Business · Contact · Website · Timeline · Notes · Status.
  * Actions: Edit · Delete · Schedule Follow-up · Convert to Client (placeholder).
  */
-export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
+export default function ProspectPanel({ prospect, error, onClose, onUpdate, onDelete }) {
   const [tab, setTab] = useState('overview')
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -109,6 +116,14 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
   const p = prospect
   const web = normalizeUrl(p.website)
   const band = scoreBand(p.website_score)
+  const siteExists = hasWebsite(p)
+  const tabs = panelTabs(siteExists)
+
+  // If the website was added/removed while open, the middle tab key changes —
+  // fall back to Overview so we never render a tab that no longer exists.
+  useEffect(() => {
+    if (!tabs.some((t) => t.key === tab)) setTab('overview')
+  }, [siteExists]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -132,7 +147,7 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
 
         {/* tabs */}
         <div className="flex gap-1 border-b border-white/[0.08] px-6">
-          {PANEL_TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
@@ -144,6 +159,10 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
             </button>
           ))}
         </div>
+
+        {error && (
+          <div className="mx-6 mt-4 rounded-xl border border-rose-400/30 bg-rose-400/[0.06] px-4 py-3 text-sm text-rose-200">{error}</div>
+        )}
 
         <div className="px-6 py-6">
           {tab === 'overview' && (editing ? (
@@ -284,7 +303,9 @@ export default function ProspectPanel({ prospect, onClose, onUpdate, onDelete })
             </>
           ))}
 
-          {tab === 'intelligence' && <WebsiteIntelligence prospect={p} onUpdate={onUpdate} />}
+          {tab === 'intelligence' && siteExists && <WebsiteIntelligence prospect={p} onUpdate={onUpdate} />}
+
+          {tab === 'nowebsite' && !siteExists && <NoWebsiteOpportunity prospect={p} />}
 
           {tab === 'outreach' && <OutreachAI prospect={p} />}
         </div>

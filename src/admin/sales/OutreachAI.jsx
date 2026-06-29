@@ -6,6 +6,7 @@ import {
   OUTREACH_CARDS, outreachStatusStyle, loadDrafts, groupByType,
   generateDraft, saveDraft, updateDraft, deleteDraft,
 } from './outreach.js'
+import { hasWebsite, buildNoWebsiteOpportunity } from './noWebsite.js'
 
 /**
  * Outreach AI tab — turns the latest Website Intelligence audit into
@@ -28,13 +29,19 @@ export default function OutreachAI({ prospect }) {
   const [savingId, setSavingId] = useState(null)
   const [copiedId, setCopiedId] = useState('')
 
-  // Load saved drafts + the latest audit for context. DB reads only — NO AI.
+  // Two workflows: a prospect WITH a website uses its latest audit; a prospect
+  // with NO website uses the deterministic No Website opportunity analysis.
+  const siteExists = hasWebsite(prospect)
+  const noWebsite = siteExists ? null : buildNoWebsiteOpportunity(prospect)
+
+  // Load saved drafts (always) + the latest audit ONLY when there's a website.
+  // DB reads only — NO AI.
   useEffect(() => {
     let alive = true
     setLoading(true); setError(''); setNotice(''); setEditing({}); setCopiedId('')
     Promise.allSettled([
       loadDrafts(supabase, prospect.id),
-      supabase
+      siteExists && supabase
         ? supabase.from('website_audits').select('*').eq('prospect_id', prospect.id)
             .order('created_at', { ascending: false }).limit(1).maybeSingle()
         : Promise.resolve({ data: null }),
@@ -42,11 +49,11 @@ export default function OutreachAI({ prospect }) {
       if (!alive) return
       if (dRes.status === 'fulfilled') setDrafts(dRes.value)
       else setError(dRes.reason?.message || 'Could not load drafts.')
-      if (aRes.status === 'fulfilled') setAudit(aRes.value?.data || null)
+      setAudit(aRes.status === 'fulfilled' ? (aRes.value?.data || null) : null)
       setLoading(false)
     })
     return () => { alive = false }
-  }, [prospect.id])
+  }, [prospect.id, siteExists])
 
   const byType = groupByType(drafts)
 
@@ -54,9 +61,9 @@ export default function OutreachAI({ prospect }) {
   const handleGenerate = async (type) => {
     setBusy((b) => ({ ...b, [type]: true })); setError('')
     try {
-      const result = await generateDraft({ type, prospect, audit })
+      const result = await generateDraft({ type, prospect, audit: siteExists ? audit : undefined, noWebsite })
       const saved = await saveDraft(supabase, {
-        prospect, audit, type, subject: result.subject, body: result.body, model: result.model,
+        prospect, audit: siteExists ? audit : null, type, subject: result.subject, body: result.body, model: result.model,
       })
       setDrafts((d) => [saved, ...d])
       setCollapsed((c) => ({ ...c, [type]: false })) // keep it visible
@@ -128,11 +135,18 @@ export default function OutreachAI({ prospect }) {
           </div>
         </div>
         <p className="mt-1.5 text-sm leading-relaxed text-gray-400">
-          Generate personalized outreach from this prospect's latest website audit. Draft generation only —
-          nothing is sent. Generating <span className="text-gold-200">auto-saves</span> a draft; AI runs only when you click Generate.
+          {siteExists
+            ? "Generate personalized outreach from this prospect's latest website audit."
+            : 'Generate personalized outreach from the No Website opportunity — focused on getting them online, never on fixing a site they don’t have.'}
+          {' '}Draft generation only — nothing is sent. Generating <span className="text-gold-200">auto-saves</span> a draft; AI runs only when you click Generate.
         </p>
         <div className="mt-3 text-xs">
-          {audit ? (
+          {!siteExists ? (
+            <span className="text-gray-400">
+              Source: <span className="font-mono text-gold-200">No Website opportunity</span>
+              <span className="text-gray-600"> · score {noWebsite.score}/100 · {noWebsite.recommended_package}</span>
+            </span>
+          ) : audit ? (
             <span className="text-gray-400">
               Source audit: <span className="font-mono text-gold-200">{audit.overall_score}/100</span>
               <span className="text-gray-600"> · {fmtDateTime(audit.created_at)}</span>

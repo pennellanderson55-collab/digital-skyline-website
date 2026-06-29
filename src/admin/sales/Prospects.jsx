@@ -184,6 +184,7 @@ export default function Prospects({ prospects, loading, error, onAdd, onUpdate, 
       {selectedLive && (
         <ProspectPanel
           prospect={selectedLive}
+          error={error}
           onClose={() => setSelected(null)}
           onUpdate={onUpdate}
           onDelete={onDelete}

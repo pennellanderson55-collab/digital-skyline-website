@@ -54,7 +54,8 @@ export function groupByType(drafts) {
 
 // Generate ONE asset via the API. Returns { type, subject, body, model,
 // generatedAt }. Does NOT save — caller decides whether to Save Draft.
-export async function generateDraft({ type, prospect, audit }) {
+// Pass `audit` (website mode) OR `noWebsite` (no-website opportunity mode).
+export async function generateDraft({ type, prospect, audit, noWebsite }) {
   const res = await fetch('/api/generate-outreach', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -65,11 +66,13 @@ export async function generateDraft({ type, prospect, audit }) {
         industry: prospect?.industry,
         city: prospect?.city,
         state: prospect?.state,
+        // Reputation signals — used by the no-website workflow.
+        google_rating: prospect?.google_rating ?? null,
+        google_reviews: prospect?.google_reviews ?? null,
       },
-      // Structured findings only — never HTML.
-      audit: audit
-        ? { overall_score: audit.overall_score, ai: audit.ai, signals: audit.signals }
-        : {},
+      // Exactly one context is sent. Structured findings only — never HTML.
+      audit: noWebsite || !audit ? {} : { overall_score: audit.overall_score, ai: audit.ai, signals: audit.signals },
+      noWebsite: noWebsite || null,
     }),
   })
   const data = await res.json().catch(() => ({}))
