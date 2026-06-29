@@ -4,7 +4,7 @@ import { Sparkle, Check, Arrow } from '../../components/Icons.jsx'
 import { fmtDateTime } from './prospects.js'
 import {
   OUTREACH_CARDS, outreachStatusStyle, loadDrafts, groupByType,
-  generateDraft, saveDraft, updateDraft,
+  generateDraft, saveDraft, updateDraft, deleteDraft,
 } from './outreach.js'
 
 /**
@@ -21,6 +21,7 @@ export default function OutreachAI({ prospect }) {
   const [drafts, setDrafts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState({})        // type -> generating?
   const [collapsed, setCollapsed] = useState({}) // type -> collapsed?
   const [editing, setEditing] = useState({})    // draftId -> { subject, body }
@@ -30,7 +31,7 @@ export default function OutreachAI({ prospect }) {
   // Load saved drafts + the latest audit for context. DB reads only — NO AI.
   useEffect(() => {
     let alive = true
-    setLoading(true); setError(''); setEditing({}); setCopiedId('')
+    setLoading(true); setError(''); setNotice(''); setEditing({}); setCopiedId('')
     Promise.allSettled([
       loadDrafts(supabase, prospect.id),
       supabase
@@ -89,6 +90,21 @@ export default function OutreachAI({ prospect }) {
     : { status: 'Used', used_at: new Date().toISOString() })
   const archive = (d) => patchDraft(d.id, { status: d.status === 'Archived' ? 'Draft' : 'Archived' })
 
+  // Permanently delete ONE draft (with confirmation); leaves all others intact.
+  const remove = async (d) => {
+    const label = OUTREACH_CARDS.find((c) => c.type === d.type)?.label || 'draft'
+    if (!window.confirm(`Delete this ${label} draft? This cannot be undone. Other drafts are not affected.`)) return
+    setError(''); setNotice('')
+    try {
+      await deleteDraft(supabase, d.id)
+      setDrafts((list) => list.filter((x) => x.id !== d.id)) // refresh saved drafts
+      cancelEdit(d.id)
+      setNotice('Draft deleted.')
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   const copy = async (d) => {
     const text = [d.subject ? `Subject: ${d.subject}` : '', d.body].filter(Boolean).join('\n\n')
     try { await navigator.clipboard.writeText(text); setCopiedId(d.id); setTimeout(() => setCopiedId((c) => (c === d.id ? '' : c)), 1600) }
@@ -131,6 +147,7 @@ export default function OutreachAI({ prospect }) {
       </div>
 
       {error && <p className="rounded-xl border border-rose-400/30 bg-rose-400/[0.06] px-4 py-3 text-sm text-rose-200">{error}</p>}
+      {notice && <p className="rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] px-4 py-3 text-sm text-emerald-200">{notice}</p>}
 
       {loading ? (
         <p className="text-sm text-gray-500">Loading saved drafts…</p>
@@ -156,6 +173,7 @@ export default function OutreachAI({ prospect }) {
               onMarkUsed={markUsed}
               onArchive={archive}
               onCopy={copy}
+              onDelete={remove}
             />
           ))}
         </div>
@@ -166,7 +184,7 @@ export default function OutreachAI({ prospect }) {
 
 function OutreachCard({
   card, audit, drafts, busy, collapsed, editing, savingId, copiedId,
-  onToggle, onGenerate, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, onMarkUsed, onArchive, onCopy,
+  onToggle, onGenerate, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, onMarkUsed, onArchive, onCopy, onDelete,
 }) {
   const count = drafts.length
   return (
@@ -209,6 +227,7 @@ function OutreachCard({
                   onMarkUsed={() => onMarkUsed(d)}
                   onArchive={() => onArchive(d)}
                   onCopy={() => onCopy(d)}
+                  onDelete={() => onDelete(d)}
                 />
               ))}
             </div>
@@ -219,7 +238,7 @@ function OutreachCard({
   )
 }
 
-function DraftRow({ draft, audit, edit, saving, copied, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, onMarkUsed, onArchive, onCopy }) {
+function DraftRow({ draft, audit, edit, saving, copied, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, onMarkUsed, onArchive, onCopy, onDelete }) {
   const isEditing = !!edit
   const archived = draft.status === 'Archived'
   const srcScore = audit && draft.audit_id === audit.id ? `${audit.overall_score}/100` : draft.audit_id ? 'prior audit' : null
@@ -263,6 +282,7 @@ function DraftRow({ draft, audit, edit, saving, copied, onStartEdit, onChangeEdi
             <button onClick={onStartEdit} className="btn-ghost px-3 py-1.5 text-xs">Edit</button>
             <button onClick={onMarkUsed} className="btn-ghost px-3 py-1.5 text-xs">{draft.status === 'Used' ? 'Mark Unused' : 'Mark Used'}</button>
             <button onClick={onArchive} className="btn-ghost px-3 py-1.5 text-xs">{archived ? 'Unarchive' : 'Archive'}</button>
+            <button onClick={onDelete} className="ml-auto rounded-full border border-rose-400/30 bg-rose-400/[0.06] px-3 py-1.5 text-xs font-medium text-rose-200 transition-colors hover:border-rose-400/60">Delete</button>
           </div>
         </>
       )}

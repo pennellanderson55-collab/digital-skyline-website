@@ -99,3 +99,9 @@ export async function updateDraft(supabase, id, patch) {
   if (error) throw new Error(error.message)
   return data
 }
+
+// Permanently delete a single draft by id (does not touch other drafts).
+export async function deleteDraft(supabase, id) {
+  const { error } = await supabase.from('outreach_drafts').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
