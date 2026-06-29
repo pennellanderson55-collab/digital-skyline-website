@@ -49,6 +49,9 @@ const SYSTEM_PROMPT = `You are the Sales Intelligence engine for Digital Skyline
 Your job is to help the Digital Skyline salesperson SELL a new or improved website to a prospect, using a homepage audit of the prospect's CURRENT site. You are not writing a generic SEO report and you are not talking to the prospect — you are briefing the salesperson in plain, confident English they can paste into an email, say on a call, or use in a consultation.
 
 Rules:
+- The overall website score and category scores were computed separately by a deterministic rule-based scanner and are FINAL. Explain and justify that score in plain English — do NOT recompute, override, or imply a different number.
+- Trust the collected signals over your assumptions. If a phone number, CTA button (e.g. "Book Your Service"), or booking link WAS detected, do not claim it's missing. Only call something missing when the signals show it is absent.
+- If scan confidence is low (the page was blocked or is JavaScript-rendered), say the audit may be incomplete rather than asserting strong weaknesses about what's "missing."
 - Be specific to THIS business and THIS audit data. Reference the actual findings (missing contact form, no mobile viewport, weak SEO, no testimonials, etc.).
 - Lead with opportunity, not jargon. Translate technical gaps into business consequences (lost leads, looks untrustworthy, hard to find on Google, loses mobile visitors).
 - Be honest but constructive — if the site is strong, say so and pitch enhancement/maintenance rather than a rebuild.
@@ -60,13 +63,14 @@ function buildUserPrompt({ businessName, industry, url, signals, categoryScores,
   return `Prospect: ${businessName || 'Unknown business'}${industry ? ` (${industry})` : ''}
 Website analyzed: ${url}
 
-Overall Website Score: ${overallScore}/100
+FINAL Overall Website Score (do not change): ${overallScore}/100
 Category scores (0–100): ${JSON.stringify(categoryScores)}
+Scan confidence: ${signals?.confidence || 'high'}${signals?.confidence_reason ? ` — ${signals.confidence_reason}` : ''}
 
 Collected homepage signals:
 ${JSON.stringify(signals, null, 2)}
 
-Using ONLY this data, produce the sales-intelligence brief as structured JSON.`
+Using ONLY this data, produce the sales-intelligence brief as structured JSON that explains the score above.`
 }
 
 export async function generateAiAnalysis(input) {

@@ -55,6 +55,36 @@ export async function loadAuditHistory(supabase, prospectId) {
   return data || []
 }
 
+// Signals worth flagging when they change between two audits of the same URL.
+// (Score is deterministic, so a moved score means one of these moved — usually
+// because the site changed or a scan was blocked/JS-rendered.)
+const TRACKED_SIGNALS = [
+  'status', 'blocked', 'confidence', 'js_rendered_maybe_missing', 'has_phone', 'has_cta',
+  'forms', 'tel_links', 'booking_links', 'quote_links', 'cta_buttons', 'contact_links',
+  'email_links', 'h1_count', 'title_length', 'meta_description_length', 'sitemap', 'robots_txt',
+  'social_count', 'testimonials', 'faq', 'images', 'page_bytes', 'script_tags',
+]
+
+// Compare the previous audit for a URL with a new one. Returns the score delta
+// and exactly which tracked signals changed (so an unstable score is explained).
+export function summarizeChanges(prevAudit, nextAudit) {
+  if (!prevAudit || !nextAudit) return null
+  const a = prevAudit.signals || {}
+  const b = nextAudit.signals || {}
+  const changes = []
+  for (const k of TRACKED_SIGNALS) {
+    const from = a[k]
+    const to = b[k]
+    if (JSON.stringify(from) !== JSON.stringify(to)) changes.push({ key: k, from, to })
+  }
+  return {
+    scoreDelta: (nextAudit.overall_score ?? 0) - (prevAudit.overall_score ?? 0),
+    prevScore: prevAudit.overall_score,
+    nextScore: nextAudit.overall_score,
+    changes,
+  }
+}
+
 // Find a fresh cached audit for this URL on this prospect, if any.
 export function findCachedAudit(history, url) {
   const target = normalizeUrl(url)

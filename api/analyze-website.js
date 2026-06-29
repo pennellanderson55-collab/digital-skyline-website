@@ -11,7 +11,7 @@
 // the result to Supabase under the authenticated user's session (RLS), so this
 // route holds no DB credentials.
 // ============================================================================
-import { collectSignals, scoreCategories, tryPageSpeed, normalizeUrl } from './_website-signals.js'
+import { collectSignals, scoreCategories, normalizeUrl } from './_website-signals.js'
 import { generateAiAnalysis } from './_ai-analysis.js'
 
 // Give the function room for the homepage fetch + optional PageSpeed + the AI turn.
@@ -46,11 +46,12 @@ export default async function handler(req, res) {
     return res.status(502).json({ ok: false, error: collected.error, finalUrl: collected.finalUrl })
   }
 
-  // 2. Optional PageSpeed, then category scoring (always runs).
-  const pageSpeed = await tryPageSpeed(collected.finalUrl)
-  const { category_scores, overall } = scoreCategories(collected.signals, pageSpeed)
+  // 2. Deterministic category scoring (rule-based, no external/variable inputs).
+  const { category_scores, overall } = scoreCategories(collected.signals)
 
-  // 3. AI sales brief (best-effort).
+  // 3. AI sales brief (best-effort). The score above is FINAL and saved as-is;
+  //    the AI explains it and never recomputes it.
+  const confidence = collected.signals.confidence
   let ai = null
   let aiModel = null
   let aiSkipped
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
     aiSkipped = `AI generation error: ${String(e?.message || e)}`
   }
 
-  console.log(`[analyze-website] done — score ${overall}/100, ai=${ai ? 'yes' : 'no'}, pagespeed=${pageSpeed != null}`)
+  console.log(`[analyze-website] done — score ${overall}/100, ai=${ai ? 'yes' : 'no'}, confidence=${confidence}`)
 
   return res.status(200).json({
     ok: true,
@@ -80,7 +81,7 @@ export default async function handler(req, res) {
     signals: collected.signals,
     categoryScores: category_scores,
     overallScore: overall,
-    pageSpeedUsed: pageSpeed != null,
+    confidence,
     ai,
     aiModel,
     aiSkipped,

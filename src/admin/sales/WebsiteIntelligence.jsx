@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase.js'
-import { Arrow, Sparkle, Check } from '../../components/Icons.jsx'
+import { Arrow, Sparkle, Check, Scan } from '../../components/Icons.jsx'
 import { normalizeUrl, fmtDateTime } from './prospects.js'
 import {
-  CATEGORIES, auditScore, ANALYZE_STEPS, loadAuditHistory, runAudit, findCachedAudit,
+  CATEGORIES, auditScore, ANALYZE_STEPS, loadAuditHistory, runAudit, findCachedAudit, summarizeChanges,
 } from './audit.js'
 
 /**
@@ -19,12 +19,13 @@ export default function WebsiteIntelligence({ prospect, onUpdate }) {
   const [step, setStep] = useState(0)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [lastDiff, setLastDiff] = useState(null)
   const stepTimer = useRef(null)
 
   // Load history once per prospect; show the latest audit by default.
   useEffect(() => {
     let alive = true
-    setError(''); setNotice(''); setResult(null)
+    setError(''); setNotice(''); setResult(null); setLastDiff(null)
     setUrl(prospect.website || '')
     loadAuditHistory(supabase, prospect.id)
       .then((h) => { if (alive) { setHistory(h); setResult(h[0] || null) } })
@@ -33,7 +34,7 @@ export default function WebsiteIntelligence({ prospect, onUpdate }) {
   }, [prospect.id, prospect.website])
 
   const analyze = async (force) => {
-    setError(''); setNotice(''); setRunning(true); setStep(0)
+    setError(''); setNotice(''); setLastDiff(null); setRunning(true); setStep(0)
     // Animate the progress steps while the request is in flight.
     stepTimer.current = setInterval(() => setStep((s) => Math.min(s + 1, ANALYZE_STEPS.length - 1)), 1400)
 
@@ -47,9 +48,24 @@ export default function WebsiteIntelligence({ prospect, onUpdate }) {
           return
         }
       }
-      const { audit, cached, aiSkipped, pageSpeedUsed } = await runAudit(supabase, {
+      const { audit, cached, aiSkipped } = await runAudit(supabase, {
         prospect, url, force, history,
       })
+
+      // Change-log: compare against the previous audit of the SAME final URL.
+      // The score is deterministic, so any movement is explained by a signal
+      // change (site edited, or the scan was blocked / JS-rendered).
+      const prior = history.find(
+        (a) => (a.final_url || a.url) === (audit.final_url || audit.url) && a.id !== audit.id,
+      )
+      const diff = summarizeChanges(prior, audit)
+      if (diff && diff.scoreDelta !== 0) {
+        console.warn(
+          `[website-intelligence] score changed ${diff.prevScore} → ${diff.nextScore} for ${audit.final_url || audit.url}. Changed signals:`,
+          diff.changes,
+        )
+      }
+
       setResult(audit)
       if (!cached) {
         setHistory((h) => [audit, ...h])
@@ -59,8 +75,14 @@ export default function WebsiteIntelligence({ prospect, onUpdate }) {
           website_audit_status: 'complete',
           last_analyzed_at: audit.created_at,
         })
+        const conf = audit.signals?.confidence
         if (aiSkipped) setNotice(`Audit saved. AI brief skipped: ${aiSkipped}`)
-        else setNotice(pageSpeedUsed ? 'Audit complete (Lighthouse performance).' : 'Audit complete.')
+        else if (diff && diff.scoreDelta !== 0) {
+          setNotice(`Audit complete. Score changed ${diff.prevScore} → ${diff.nextScore} — ${diff.changes.length} signal(s) changed (see “What changed”).`)
+        } else if (conf === 'low') {
+          setNotice('Audit complete — low scan confidence (see banner).')
+        } else setNotice('Audit complete.')
+        setLastDiff(diff && diff.scoreDelta !== 0 ? diff : null)
       }
     } catch (e) {
       setError(e.message)
@@ -99,7 +121,7 @@ export default function WebsiteIntelligence({ prospect, onUpdate }) {
 
       {running && <Progress step={step} />}
 
-      {!running && result && <AuditResult audit={result} />}
+      {!running && result && <AuditResult audit={result} diff={lastDiff} />}
 
       {!running && !result && !error && (
         <div className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-gray-500">
@@ -164,11 +186,40 @@ function Progress({ step }) {
 
 /* -------------------------------------------------------------- result */
 
-function AuditResult({ audit }) {
+function AuditResult({ audit, diff }) {
   const cats = audit.category_scores || {}
   const ai = audit.ai
+  const s = audit.signals || {}
   return (
     <div className="space-y-6">
+      {/* Scan confidence — warn when the scanner couldn't see the full page */}
+      {s.confidence === 'low' && (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 text-sm text-amber-100">
+          <span className="font-semibold">Low confidence</span> — scanner may not see everything visible in a browser.
+          {s.confidence_reason && <span className="block text-amber-200/80">{s.confidence_reason}</span>}
+        </div>
+      )}
+
+      {/* Change-log — explains a moved score (the score itself is deterministic) */}
+      {diff && diff.changes?.length > 0 && (
+        <details className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+          <summary className="cursor-pointer text-sm text-gray-300">
+            What changed since the last scan — score {diff.prevScore} → {diff.nextScore}
+          </summary>
+          <ul className="mt-3 space-y-1.5">
+            {diff.changes.map((c) => (
+              <li key={c.key} className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-gray-500">{c.key.replace(/_/g, ' ')}</span>
+                <span className="text-right font-mono text-gray-300">{fmtVal(c.from)} → {fmtVal(c.to)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {/* What the scanner detected — raw signals, always shown */}
+      <DetectionSummary s={s} />
+
       {/* Score header */}
       <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.04] to-white/[0.01] p-6">
         <ScoreRing value={audit.overall_score} />
@@ -281,6 +332,51 @@ function ListBlock({ title, items }) {
       </ul>
     </div>
   )
+}
+
+// What the scanner actually detected — the "show your work" panel so an
+// inaccurate audit is debuggable at a glance.
+function DetectionSummary({ s }) {
+  const list = (arr) => (Array.isArray(arr) && arr.length ? arr.join(' · ') : '—')
+  const yn = (v) => (v ? 'Yes' : 'No')
+  const rows = [
+    ['Phone numbers found', list(s.phone_numbers_found)],
+    ['tel: links', s.tel_links ?? 0],
+    ['CTA phrases found', list(s.cta_phrases_found)],
+    ['Buttons / links detected', list(s.buttons_found)],
+    ['CTA-style buttons', s.cta_buttons ?? 0],
+    ['Forms', s.forms ?? 0],
+    ['Booking links', s.booking_links ?? 0],
+    ['Quote / service-request links', s.quote_links ?? 0],
+    ['Homepage status code', s.status ?? '—'],
+    ['Final URL after redirects', s.final_url || '—'],
+    ['Blocked by 403 / robots / wall', s.blocked ? `Yes — ${s.blocked_reason || 'access wall'}` : 'No'],
+    ['JS-rendered content may be missing', yn(s.js_rendered_maybe_missing)],
+    ['Scan confidence', s.confidence === 'low' ? 'Low' : 'High'],
+  ]
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <Scan className="h-4 w-4 text-gold-300" />
+        <h4 className="font-display text-sm font-semibold text-gray-100">What the scanner detected</h4>
+      </div>
+      <div className="grid gap-x-6 gap-y-1.5">
+        {rows.map(([label, val]) => (
+          <div key={label} className="flex items-start justify-between gap-4 text-xs">
+            <span className="shrink-0 text-gray-500">{label}</span>
+            <span className="text-right font-mono text-gray-300">{String(val)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function fmtVal(v) {
+  if (Array.isArray(v)) return v.length ? v.join(', ') : 'none'
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No'
+  if (v === '' || v == null) return '—'
+  return String(v)
 }
 
 function SignalGrid({ signals }) {
