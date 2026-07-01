@@ -18,7 +18,8 @@ export const OUTREACH_TYPES = ['cold_email', 'follow_up', 'call_script', 'dm', '
 // one closes personally and consistently. Kept in code (not the AI) so wording
 // and links are exact every time.
 export const EMAIL_SIGNATURE = [
-  '—',
+  'Best,',
+  '',
   'Pernell Anderson',
   'Founder',
   'Digital Skyline Co.',
@@ -31,7 +32,13 @@ const TYPES = {
     label: 'Cold Email',
     subject: true,
     instruction:
-      'Write a first-touch cold email to the business owner, in the FIRST PERSON ("I", never "we"). 90–150 words. Open with one specific, genuine observation about their website (use the biggest weakness or highest-ROI improvement). In one or two sentences, make clear I am an independent owner/founder who personally does the work and takes pride in it — not a big studio or agency. Include ONE sentence that encourages them to visit my website at https://digitalskylineco.com to see the level of work I am capable of before scheduling a consultation. End with a simple, low-pressure invitation to a free 15-minute consultation. Do NOT add a greeting line or any sign-off/signature — both are added automatically. Plain text, no markdown.',
+      'Write a personalized first-touch outreach email to the business owner, 180–300 words, that feels handwritten specifically for this business. Follow this natural flow (as flowing prose, never labeled sections or lists):\n' +
+      '1) Open with a genuine, fact-based compliment about their business. If a Google rating/reviews are present, mention it naturally (e.g. "a 4.8-star rating says a lot about the care you put into your work"). Never invent a rating.\n' +
+      '2) Transition into one or two real observations from the audit ("I noticed…", "One thing I noticed…"), and briefly explain how improving them could help customers find information, build confidence, or reach them more easily. If the site is strong, say so honestly and suggest refinements instead of problems.\n' +
+      '3) Introduce yourself naturally: I\'m Pernell, founder of Digital Skyline Co., an independent web developer here in Arizona who helps small businesses build modern websites and digital tools.\n' +
+      '4) Invite them to visit https://digitalskylineco.com (plain text link) to see examples of my work and what\'s possible for a business like theirs.\n' +
+      '5) Close by inviting them to a completely free, no-obligation, no-pressure consultation — make clear that even if they decide not to work with me, I\'m happy to answer questions or share ideas that might help, and I\'m glad to hop on a quick 15-minute call.\n' +
+      'Do NOT add a greeting line or any sign-off/signature — both are added automatically. The subject line should be short, specific and human (mention their business or a concrete detail), never clickbait.',
   },
   follow_up: {
     label: 'Short Follow-Up Email',
@@ -75,22 +82,31 @@ const SCHEMA = {
   required: ['subject', 'body'],
 }
 
-const SYSTEM_PROMPT = `You write outreach on behalf of the founder of Digital Skyline Co. Digital Skyline is NOT a big agency, studio or team — it is one independent owner/founder who personally designs and builds websites, apps and business systems for local small businesses (Phoenix/Arizona and beyond), and is building his name by helping local businesses directly.
+const SYSTEM_PROMPT = `You are Pernell Anderson, founder of Digital Skyline Co. You are an independent web developer and AI solutions builder based in Arizona. You personally build websites, business dashboards, automations and digital tools for small businesses. You are trying to earn trust, build your portfolio, and help local businesses grow.
 
-You are helping the founder reach out to a prospect after looking at the prospect's CURRENT website. Write copy that sounds like a real, thoughtful, individual person reaching out personally — not a company or a sales team.
+Every email must read like it was written by a real local business owner who genuinely reviewed the prospect's business — not by an AI assistant and not by a marketing agency. The reader should feel like another small business owner reached out personally after actually looking at their business.
 
-Voice & identity:
-- Write in the FIRST PERSON singular ("I", "my"), never "we", "our team" or "us". This is one person, not a studio.
-- Make clear (naturally, not braggy) that I am an independent owner/founder who personally does the work — not a big studio, agency or team.
-- Tone: personal, professional, confident, and friendly — an independent owner who takes real pride in the work. Never arrogant, never corporate, never salesy.
+WHO YOU ARE:
+- Always write in the FIRST PERSON singular ("I noticed…", "I wanted to reach out…", "I build websites…", "I'd love to help.").
+- NEVER use "we", "our team", "our specialists", "our agency", or "us". It is just you.
+- NEVER describe yourself as a large agency, team, marketing firm, enterprise, full-service company, or studio with employees. You are one independent person.
 
-Hard rules:
-- Never spammy, never robotic, never overly technical, never corporate-sounding.
-- NO exaggerated or fabricated promises. Never guarantee leads, sales, traffic, rankings or revenue. No "I guarantee you more leads."
-- No fake claims, no invented statistics, no fake urgency, no manipulative pressure.
-- Be specific to THIS business using the findings provided. Reference real details (their industry, city, rating/reviews, the actual opportunity).
-- Keep it tight and natural. Write only the asset requested — no preamble, no notes, no explanation of what you wrote.
-- When an asset is an email, use my real site link as plain text exactly as https://digitalskylineco.com (no markdown link syntax).
+STYLE — every email should feel personal, friendly, professional, honest, humble, well-researched and helpful:
+- Never sound automated, pushy, desperate, or exaggerated.
+- Plain text only. No markdown, no emojis, no bullet lists, no headings, no hype.
+- Avoid corporate buzzwords entirely. NEVER use: revolutionary, leverage, cutting-edge, disruptive, synergize, world-class, industry-leading, game-changing.
+
+HONESTY:
+- Use only real observations from the audit/findings provided. NEVER invent problems, statistics, or ratings.
+- NEVER promise more revenue, Google rankings, guaranteed leads, or guaranteed sales.
+- If the audit shows a strong website, compliment it honestly and suggest refinements — do not pretend it's bad.
+- Frame opportunities around helping customers find information more easily, building confidence, and making it easier to contact the business. No fear-based selling.
+
+METRICS:
+- If the findings include measurable scores (overall, SEO, conversion, branding, trust, mobile/mobile_ux, performance), you MAY naturally reference one or two when they genuinely strengthen the message (e.g. "I ran a quick audit and your site scored 81/100 overall" or "your mobile experience scored well, but I noticed a couple of areas that could convert more visitors").
+- Never force a score in. Only mention metrics when they support the conversation, and never list them like a report.
+
+Write only the requested asset — no preamble, no notes, no explanation of what you wrote.
 
 There are TWO modes — follow the one indicated in the prompt:
 - WEBSITE AUDIT mode: the prospect HAS a website that was audited. Trust the detected signals; if a phone/CTA/form WAS detected, don't claim it's missing. If scan confidence is low, stay general about what's "missing."
@@ -134,7 +150,10 @@ Return JSON: { "subject": ${TYPES[type].subject ? '"<email subject>"' : '""'}, "
     business_name: prospect.business_name || 'the business',
     industry: prospect.industry || 'unknown',
     location: loc || 'unknown',
+    google_rating: prospect.google_rating ?? null,
+    google_reviews: prospect.google_reviews ?? null,
     website_score: audit.overall_score ?? 'n/a',
+    category_scores: audit.category_scores || null, // {performance, seo, conversion, trust, branding, mobile_ux}
     biggest_strength: ai.biggest_strength || null,
     biggest_weakness: ai.biggest_weakness || null,
     highest_roi_improvement: ai.highest_roi_improvement || null,
@@ -219,7 +238,7 @@ export async function generateOutreach({ type, prospect, audit, noWebsite }) {
   // so a slightly longer turn can't hit an HTTP timeout.
   const stream = client.messages.stream({
     model: MODEL,
-    max_tokens: 1200,
+    max_tokens: 2000, // headroom for 180–300 word emails + adaptive thinking
     thinking: { type: 'adaptive' },
     output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
     system: SYSTEM_PROMPT,
