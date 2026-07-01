@@ -130,14 +130,17 @@ export default function ScrollScrubShowcase() {
       className="relative h-screen w-full select-none overflow-hidden bg-ink-950"
       style={{ cursor: reduced ? 'default' : 'grab' }}
     >
+      {/* preload="none" + no autoPlay: the IntersectionObserver below starts
+          playback (and the download) only once the section is in view, and
+          pauses it when it scrolls away — so this 17MB clip costs nothing until
+          a visitor actually reaches it. Visual behavior is unchanged. */}
       <video
         ref={videoRef}
         src="/ds-city-1.mp4"
         muted
         loop
-        autoPlay
         playsInline
-        preload="auto"
+        preload="none"
         aria-hidden="true"
         className="absolute inset-0 h-full w-full object-cover"
       />

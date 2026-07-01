@@ -27,6 +27,7 @@ export default function Navbar() {
             <img
               src="/logo.png"
               alt="Digital Skyline Co."
+              decoding="async"
               className="h-full w-full scale-[1.08] object-cover"
             />
           </span>

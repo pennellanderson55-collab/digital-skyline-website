@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Arrow, Sparkle } from './Icons.jsx'
 import { supabase } from '../lib/supabase.js'
@@ -124,11 +124,20 @@ export default function Consultation() {
     }
   }
 
-  const fetchBooked = async (date) => {
+  // Per-date cache of booked times so browsing back and forth between dates
+  // doesn't re-hit the RPC. `fresh: true` bypasses it for the authoritative
+  // availability re-check at submit time (correctness must not be cached).
+  const bookedCache = useRef(new Map())
+
+  const fetchBooked = async (date, { fresh = false } = {}) => {
     if (!supabase || !date) return []
-    const { data, error } = await supabase.rpc('booked_times', { d: toISODate(date) })
-    if (error) return []
-    return data || []
+    const key = toISODate(date)
+    if (!fresh && bookedCache.current.has(key)) return bookedCache.current.get(key)
+    const { data, error } = await supabase.rpc('booked_times', { d: key })
+    if (error) return bookedCache.current.get(key) || []
+    const times = data || []
+    bookedCache.current.set(key, times)
+    return times
   }
 
   const pickDate = async (date) => {
@@ -171,8 +180,8 @@ export default function Consultation() {
     setSubmitting(true)
     setErrors((er) => ({ ...er, submit: undefined }))
 
-    // Re-check availability right before confirming.
-    const taken = await fetchBooked(selected)
+    // Re-check availability right before confirming (always fresh, never cached).
+    const taken = await fetchBooked(selected, { fresh: true })
     if (taken.includes(time)) {
       setBookedTimes(taken)
       setTime(null)
@@ -210,7 +219,7 @@ export default function Consultation() {
       })
       // 23505 = unique violation → slot was taken between check and insert.
       if (error.code === '23505') {
-        setBookedTimes(await fetchBooked(selected))
+        setBookedTimes(await fetchBooked(selected, { fresh: true }))
         setTime(null)
         setErrors((er) => ({ ...er, time: SLOT_TAKEN_MSG }))
       } else {
