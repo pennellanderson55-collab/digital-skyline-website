@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { supabase } from '../../lib/supabase.js'
 import ProspectForm from './ProspectForm.jsx'
 import WebsiteIntelligence from './WebsiteIntelligence.jsx'
 import NoWebsiteOpportunity from './NoWebsiteOpportunity.jsx'
@@ -300,6 +301,11 @@ export default function ProspectPanel({ prospect, error, onClose, onUpdate, onDe
               <Group title="Notes">
                 <p className="whitespace-pre-wrap text-sm text-gray-300">{p.notes || '—'}</p>
               </Group>
+
+              {/* Outreach History — emails actually sent to this prospect */}
+              <Group title="Outreach History">
+                <SentEmailLog prospectId={p.id} />
+              </Group>
             </>
           ))}
 
@@ -327,6 +333,56 @@ export default function ProspectPanel({ prospect, error, onClose, onUpdate, onDe
         )}
       </aside>
     </div>
+  )
+}
+
+// Read-only log of emails ACTUALLY sent to this prospect. Reads outreach_drafts
+// (any draft with a sent_at, regardless of later archive), newest first. No AI,
+// no writes — just surfaces what the Sending Queue recorded, on the prospect
+// record itself so the send history lives with the lead.
+function SentEmailLog({ prospectId }) {
+  const [rows, setRows] = useState(null) // null = loading
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    setRows(null); setError('')
+    if (!supabase) { setRows([]); return }
+    supabase
+      .from('outreach_drafts')
+      .select('id, subject, recipient_email, sender_email, sent_at, sandboxed, delivery_status')
+      .eq('prospect_id', prospectId)
+      .not('sent_at', 'is', null)
+      .order('sent_at', { ascending: false })
+      .limit(50)
+      .then(({ data, error: e }) => {
+        if (!alive) return
+        if (e) setError(e.message)
+        else setRows(data || [])
+      })
+    return () => { alive = false }
+  }, [prospectId])
+
+  if (error) return <p className="text-sm text-rose-300">{error}</p>
+  if (rows === null) return <p className="text-sm text-gray-500">Loading sent emails…</p>
+  if (rows.length === 0) return <p className="text-sm text-gray-600">No emails sent yet. Approved drafts sent from the Sending Queue appear here.</p>
+
+  return (
+    <ul className="space-y-2.5">
+      {rows.map((r) => (
+        <li key={r.id} className="rounded-lg border border-white/[0.07] bg-ink-950/40 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <span className="text-sm font-medium text-gray-100">{r.subject || '(no subject)'}</span>
+            {r.sandboxed
+              ? <span className="shrink-0 rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 font-mono text-[10px] text-amber-200">TEST</span>
+              : <span className="shrink-0 rounded-full border border-teal-400/40 bg-teal-400/10 px-2 py-0.5 font-mono text-[10px] text-teal-200">SENT</span>}
+          </div>
+          <div className="mt-1 font-mono text-[11px] text-gray-500">
+            {fmtDateTime(r.sent_at)} · to {r.recipient_email || '—'} · from {r.sender_email || 'hello@digitalskylineco.com'}
+          </div>
+        </li>
+      ))}
+    </ul>
   )
 }
 

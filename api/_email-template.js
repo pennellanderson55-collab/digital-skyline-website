@@ -78,8 +78,8 @@ export function buildOutreachEmail({ subject = '', body = '', prospect = {}, lin
         <tr><td style="padding:0 28px 24px;">
           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
             <td style="border-left:3px solid ${GOLD};padding-left:14px;">
-              <div style="font-weight:bold;color:${INK};font-size:15px;">${esc(BRAND)} Team</div>
-              <div style="color:#6b7280;font-size:13px;">${esc(BRAND)} — Websites, Apps &amp; Business Systems</div>
+              <div style="font-weight:bold;color:${INK};font-size:15px;">${esc(BRAND)} Co.</div>
+              <div style="color:#6b7280;font-size:13px;">Independent founder · Websites, Apps &amp; Business Systems</div>
               <div style="font-size:13px;margin-top:4px;">
                 <a href="mailto:hello@digitalskylineco.com" style="color:${INK};text-decoration:none;">hello@digitalskylineco.com</a>
                 &nbsp;·&nbsp;<a href="${esc(site)}" style="color:${INK};text-decoration:none;">${esc(site.replace(/^https?:\/\//, ''))}</a>
@@ -97,8 +97,8 @@ export function buildOutreachEmail({ subject = '', body = '', prospect = {}, lin
             <br/>
             <span style="color:#b3b9c2;">Phoenix, Arizona</span>
             <br/><br/>
-            You're receiving this because we thought ${esc(prospect.business_name || 'your business')} could benefit from a stronger online presence.
-            If you'd prefer not to hear from us, just reply and we'll remove you.
+            You're receiving this because I thought ${esc(prospect.business_name || 'your business')} could benefit from a stronger online presence.
+            If you'd prefer not to hear from me, just reply and I'll remove you.
           </div>
         </td></tr>
 

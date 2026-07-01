@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { Check, Arrow, Sparkle, Activity, Chart, User, Shield, Cube, Bolt, Scan } from '../components/Icons.jsx'
+import { Check, Arrow, Sparkle, Activity, Chart, User, Shield, Cube, Bolt, Scan, Cog, Menu, Close } from '../components/Icons.jsx'
 import Clients from './Clients.jsx'
 import Projects from './Projects.jsx'
 import Support, { SupportModal } from './Support.jsx'
 import ProjectProfile from './ProjectProfile.jsx'
+import Settings from './Settings.jsx'
 import { INITIAL_PROJECT_STAGE, balanceDue, fmtMoney, fmtDateTime } from './ops.js'
 import { sendEmail } from '../lib/email.js'
 import SalesDashboard from './sales/SalesDashboard.jsx'
@@ -25,6 +26,7 @@ const OPS_NAV = [
   { key: 'Projects', label: 'Projects', icon: Cube },
   { key: 'Support', label: 'Support', icon: Bolt },
   { key: 'Analytics', label: 'Analytics', icon: Chart },
+  { key: 'Settings', label: 'Settings', icon: Cog },
 ]
 const SALES_NAV = [
   { key: 'sales:dashboard', label: 'Dashboard', icon: Activity },
@@ -249,9 +251,10 @@ function Dashboard({ session }) {
     setProspectsLoading(false)
   }
 
-  // Lazy-load the first time any Sales view is opened.
+  // Lazy-load the first time any Sales view — or Settings (needs the prospect
+  // list for the testing-cleanup section) — is opened.
   useEffect(() => {
-    if (nav.startsWith('sales:') && !prospectsLoaded && !prospectsLoading) loadProspects()
+    if ((nav.startsWith('sales:') || nav === 'Settings') && !prospectsLoaded && !prospectsLoading) loadProspects()
   }, [nav, prospectsLoaded, prospectsLoading])
 
   // Make DB rejections actionable instead of a silent revert. The most common
@@ -421,11 +424,21 @@ function Dashboard({ session }) {
     <Shell>
       {/* header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-gray-50">
-            Digital Skyline <span className="text-gold-gradient">OS</span>
-          </h1>
-          <p className="text-xs text-gray-500">{session.user.email}</p>
+        <div className="flex items-center gap-3">
+          {/* Burger — opens the mobile nav drawer (hidden on desktop). */}
+          <button
+            onClick={() => setNavOpenMobile(true)}
+            aria-label="Open navigation menu"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.02] text-gray-200 transition-colors hover:border-gold-400/40 lg:hidden"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <div>
+            <h1 className="font-display text-2xl font-bold text-gray-50">
+              Digital Skyline <span className="text-gold-gradient">OS</span>
+            </h1>
+            <p className="text-xs text-gray-500">{isSales ? `Sales · ${navLabel}` : navLabel} · {session.user.email}</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -438,18 +451,28 @@ function Dashboard({ session }) {
         </div>
       </div>
 
-      {/* mobile section bar */}
-      <button
-        onClick={() => setNavOpenMobile((o) => !o)}
-        className="mt-6 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-gray-200 lg:hidden"
-      >
-        <span className="font-display font-medium">{isSales ? `Sales · ${navLabel}` : navLabel}</span>
-        <Arrow className={`h-4 w-4 transition-transform ${navOpenMobile ? 'rotate-90' : ''}`} />
-      </button>
-
       <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:gap-8">
-        {/* sidebar */}
-        <aside className={`${navOpenMobile ? 'block' : 'hidden'} lg:block lg:w-60 lg:shrink-0`}>
+        {/* Mobile drawer backdrop */}
+        {navOpenMobile && (
+          <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" onClick={() => setNavOpenMobile(false)} aria-hidden="true" />
+        )}
+
+        {/* sidebar — static column on desktop, slide-out drawer on mobile */}
+        <aside
+          className={`${
+            navOpenMobile
+              ? 'fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto border-r border-white/10 bg-ink-950 p-6 shadow-2xl animate-[drawerIn_0.24s_cubic-bezier(0.2,0.8,0.3,1)]'
+              : 'hidden'
+          } lg:static lg:z-auto lg:block lg:w-60 lg:shrink-0 lg:overflow-visible lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}
+        >
+          <style>{`@keyframes drawerIn{from{transform:translateX(-16px);opacity:0}to{transform:none;opacity:1}}`}</style>
+          {/* drawer header (mobile only) */}
+          <div className="mb-6 flex items-center justify-between lg:hidden">
+            <span className="font-display text-sm font-semibold text-gray-100">Menu</span>
+            <button onClick={() => setNavOpenMobile(false)} aria-label="Close navigation menu" className="text-gray-400 hover:text-gray-200">
+              <Close className="h-5 w-5" />
+            </button>
+          </div>
           <nav className="lg:sticky lg:top-6 space-y-6">
             <NavGroup label="Operations">
               {OPS_NAV.map((item) => (
@@ -516,6 +539,12 @@ function Dashboard({ session }) {
               {nav === 'Projects' && <Projects projects={projects} onOpen={setActiveProject} onStageChange={changeStage} />}
               {nav === 'Support' && <Support rows={support} onStatus={updateSupport} onOpen={setActiveSupport} />}
               {nav === 'Analytics' && <Analytics rows={rows} />}
+              {nav === 'Settings' && (
+                <>
+                  {prospectsError && <p className="mb-4 rounded-xl border border-rose-400/30 bg-rose-400/[0.06] px-4 py-3 text-sm text-rose-200">{prospectsError}</p>}
+                  <Settings prospects={prospects} onDeleteProspect={deleteProspect} />
+                </>
+              )}
             </>
           )}
         </div>
