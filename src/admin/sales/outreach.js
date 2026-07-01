@@ -71,7 +71,7 @@ export async function generateDraft({ type, prospect, audit, noWebsite }) {
         google_reviews: prospect?.google_reviews ?? null,
       },
       // Exactly one context is sent. Structured findings only — never HTML.
-      audit: noWebsite || !audit ? {} : { overall_score: audit.overall_score, ai: audit.ai, signals: audit.signals },
+      audit: noWebsite || !audit ? {} : { overall_score: audit.overall_score, category_scores: audit.category_scores, ai: audit.ai, signals: audit.signals },
       noWebsite: noWebsite || null,
     }),
   })
