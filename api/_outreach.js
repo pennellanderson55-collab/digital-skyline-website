@@ -14,19 +14,30 @@ const MODEL = process.env.OUTREACH_MODEL || process.env.ANTHROPIC_MODEL || 'clau
 
 export const OUTREACH_TYPES = ['cold_email', 'follow_up', 'call_script', 'dm', 'objections', 'consultation']
 
+// Canonical founder sign-off appended to every generated outreach EMAIL so each
+// one closes personally and consistently. Kept in code (not the AI) so wording
+// and links are exact every time.
+export const EMAIL_SIGNATURE = [
+  '—',
+  'Pernell Anderson',
+  'Founder',
+  'Digital Skyline Co.',
+  'https://digitalskylineco.com',
+].join('\n')
+
 // Per-type instruction + whether a subject line is expected.
 const TYPES = {
   cold_email: {
     label: 'Cold Email',
     subject: true,
     instruction:
-      'Write a first-touch cold email to the business owner, in the FIRST PERSON ("I", never "we"). 90–150 words. Open with one specific, genuine observation about their website (use the biggest weakness or highest-ROI improvement). In one or two humble sentences, make clear I am an independent owner/founder building my name by helping local businesses directly — not a big studio or agency. Invite them to check out my site to see what is possible, and include the plain link https://digitalskylineco.com. End with a simple, low-pressure invitation to a free 15-minute consultation. Do NOT add a greeting line (one is added for you) or a signature. Plain text, no markdown.',
+      'Write a first-touch cold email to the business owner, in the FIRST PERSON ("I", never "we"). 90–150 words. Open with one specific, genuine observation about their website (use the biggest weakness or highest-ROI improvement). In one or two sentences, make clear I am an independent owner/founder who personally does the work and takes pride in it — not a big studio or agency. Include ONE sentence that encourages them to visit my website at https://digitalskylineco.com to see the level of work I am capable of before scheduling a consultation. End with a simple, low-pressure invitation to a free 15-minute consultation. Do NOT add a greeting line or any sign-off/signature — both are added automatically. Plain text, no markdown.',
   },
   follow_up: {
     label: 'Short Follow-Up Email',
     subject: true,
     instruction:
-      'Write a short, friendly follow-up email in the FIRST PERSON ("I", never "we"), assuming the first email got no reply. 45–80 words. Reference the original note lightly, add one small piece of value or a single relevant question, and gently remind them I am an independent founder helping local businesses (not a big studio). Invite them to take a look at https://digitalskylineco.com and offer a simple 15-minute consultation. Not pushy. Do NOT add a greeting or signature. Plain text, no markdown.',
+      'Write a short, friendly follow-up email in the FIRST PERSON ("I", never "we"), assuming the first email got no reply. 45–90 words. Reference the original note lightly and add one small piece of value or a single relevant question. Include ONE sentence encouraging them to visit my website at https://digitalskylineco.com to see the level of work I am capable of before we talk, and offer a simple 15-minute consultation. Not pushy. Do NOT add a greeting line or any sign-off/signature — both are added automatically. Plain text, no markdown.',
   },
   call_script: {
     label: 'Cold Call Script',
@@ -70,8 +81,8 @@ You are helping the founder reach out to a prospect after looking at the prospec
 
 Voice & identity:
 - Write in the FIRST PERSON singular ("I", "my"), never "we", "our team" or "us". This is one person, not a studio.
-- Be humble and personal: make clear (naturally, not braggy) that I am an independent owner/founder building my name by helping local businesses — not a big studio or agency.
-- Tone: personal, humble, professional, and direct. Warm but not salesy.
+- Make clear (naturally, not braggy) that I am an independent owner/founder who personally does the work — not a big studio, agency or team.
+- Tone: personal, professional, confident, and friendly — an independent owner who takes real pride in the work. Never arrogant, never corporate, never salesy.
 
 Hard rules:
 - Never spammy, never robotic, never overly technical, never corporate-sounding.
@@ -223,5 +234,8 @@ export async function generateOutreach({ type, prospect, audit, noWebsite }) {
 
   const out = JSON.parse(textBlock.text)
   const subject = TYPES[type].subject ? (out.subject || '').trim() : ''
-  return { type, subject, body: (out.body || '').trim(), model: MODEL }
+  let body = (out.body || '').trim()
+  // Email types (those with a subject) always close with the founder signature.
+  if (TYPES[type].subject) body = `${body}\n\n${EMAIL_SIGNATURE}`
+  return { type, subject, body, model: MODEL }
 }

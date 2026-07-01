@@ -198,6 +198,10 @@ function Dashboard({ session }) {
   const [prospectsError, setProspectsError] = useState('')
   const [activeProspect, setActiveProspect] = useState(null) // panel opened from dashboard/pipeline/follow-ups
 
+  // Dashboard funnel — real Emails Sent / Replies counts from outreach_drafts
+  // (sent_at / replied_at). Count-only queries (head:true) so egress stays tiny.
+  const [outreachCounts, setOutreachCounts] = useState({ sent: null, replies: null })
+
   // Derive the client list from the projects join (clients 1──1 project for now).
   const clients = useMemo(() => {
     const map = new Map()
@@ -225,7 +229,22 @@ function Dashboard({ session }) {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  // Load the funnel email counts (best-effort — 0 if the table isn't migrated).
+  const loadOutreachCounts = async () => {
+    if (!supabase) return
+    const [sent, rep] = await Promise.all([
+      supabase.from('outreach_drafts').select('id', { count: 'exact', head: true }).not('sent_at', 'is', null),
+      supabase.from('outreach_drafts').select('id', { count: 'exact', head: true }).not('replied_at', 'is', null),
+    ])
+    setOutreachCounts({
+      sent: sent.error ? null : (sent.count ?? 0),
+      replies: rep.error ? null : (rep.count ?? 0),
+    })
+  }
+
+  // Eager-load consultations/projects AND the sales prospects + funnel counts so
+  // the dashboard stat row is populated on Home (prospects also feed Sales views).
+  useEffect(() => { load(); loadProspects(); loadOutreachCounts() }, [])
 
   // ── Sales / Outreach CRM data ──────────────────────────────────────────
   const loadProspects = async () => {
@@ -530,7 +549,7 @@ function Dashboard({ session }) {
             />
           ) : (
             <>
-              {nav === 'Home' && <Home consultations={rows} clients={clients} projects={projects} support={support} history={history} />}
+              {nav === 'Home' && <Home consultations={rows} clients={clients} projects={projects} support={support} history={history} prospects={prospects} outreach={outreachCounts} />}
               {nav === 'Consultations' && (
                 <Consultations rows={rows} onOpen={setActive} onStatus={updateRow} />
               )}
@@ -628,7 +647,30 @@ function NavItem({ item, active, onClick }) {
 
 /* ------------------------------------------------------------------- home */
 
-function Home({ consultations, clients, projects, support, history }) {
+// Statuses that count as a booked consultation / a closed client in the funnel.
+const FUNNEL_CONSULT = ['Consultation Booked', 'Consultation Scheduled', 'Consultation Completed']
+const FUNNEL_CLOSED = ['Won', 'Client']
+
+function Home({ consultations, clients, projects, support, history, prospects = [], outreach = {} }) {
+  // Sales funnel row (top of dashboard). New Leads / Consultations Booked /
+  // Clients Closed / Close Rate come from the Prospects CRM; Emails Sent and
+  // Replies are real counts from outreach_drafts (sent_at / replied_at).
+  const funnel = useMemo(() => {
+    const newLeads = prospects.filter((p) => p.status === 'New Lead').length
+    const consults = prospects.filter((p) => FUNNEL_CONSULT.includes(p.status)).length
+    const closed = prospects.filter((p) => FUNNEL_CLOSED.includes(p.status)).length
+    const total = prospects.length
+    const closeRate = total ? Math.round((closed / total) * 100) : 0
+    return [
+      { label: 'New Leads', value: newLeads },
+      { label: 'Emails Sent', value: outreach.sent == null ? '—' : outreach.sent },
+      { label: 'Replies', value: outreach.replies == null ? '—' : outreach.replies },
+      { label: 'Consultations Booked', value: consults },
+      { label: 'Clients Closed', value: closed },
+      { label: 'Close Rate', value: `${closeRate}%` },
+    ]
+  }, [prospects, outreach])
+
   const { kpis, activity } = useMemo(() => {
     const now = new Date()
     const sameMonth = (d) => d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
@@ -675,6 +717,19 @@ function Home({ consultations, clients, projects, support, history }) {
 
   return (
     <div className="space-y-8">
+      {/* Sales funnel — top statistics row */}
+      <div>
+        <div className="eyebrow mb-3"><Chart className="h-3.5 w-3.5" /> Sales Funnel</div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {funnel.map((s) => (
+            <div key={s.label} className="card-surface p-5 shadow-card">
+              <div className="font-display text-2xl font-bold text-gold-gradient md:text-3xl">{s.value}</div>
+              <div className="mt-1.5 text-xs leading-tight text-gray-400">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((s) => (
           <div key={s.label} className="card-surface p-6 shadow-card">

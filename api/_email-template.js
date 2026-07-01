@@ -15,11 +15,18 @@ const esc = (s = '') => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
+// Turn bare http(s) URLs (already HTML-escaped) into clickable links so the
+// founder signature link in the body is tappable in the sent email.
+function linkify(escaped = '') {
+  return escaped.replace(/(https?:\/\/[^\s<]+)/g, (url) =>
+    `<a href="${url}" target="_blank" style="color:${GOLD};text-decoration:none;">${url}</a>`)
+}
+
 // Plain-text body -> safe HTML paragraphs (preserves line breaks).
 function bodyToHtml(body = '') {
   return esc(body)
     .split(/\n{2,}/)
-    .map((para) => `<p style="margin:0 0 16px;line-height:1.6;color:#2b2b2b;font-size:15px;">${para.replace(/\n/g, '<br/>')}</p>`)
+    .map((para) => `<p style="margin:0 0 16px;line-height:1.6;color:#2b2b2b;font-size:15px;">${linkify(para).replace(/\n/g, '<br/>')}</p>`)
     .join('')
 }
 
@@ -74,19 +81,8 @@ export function buildOutreachEmail({ subject = '', body = '', prospect = {}, lin
           </div>
         </td></tr>
 
-        <!-- Signature -->
-        <tr><td style="padding:0 28px 24px;">
-          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-            <td style="border-left:3px solid ${GOLD};padding-left:14px;">
-              <div style="font-weight:bold;color:${INK};font-size:15px;">${esc(BRAND)} Co.</div>
-              <div style="color:#6b7280;font-size:13px;">Independent founder · Websites, Apps &amp; Business Systems</div>
-              <div style="font-size:13px;margin-top:4px;">
-                <a href="mailto:hello@digitalskylineco.com" style="color:${INK};text-decoration:none;">hello@digitalskylineco.com</a>
-                &nbsp;·&nbsp;<a href="${esc(site)}" style="color:${INK};text-decoration:none;">${esc(site.replace(/^https?:\/\//, ''))}</a>
-              </div>
-            </td>
-          </tr></table>
-        </td></tr>
+        <!-- Signature is carried in the message body itself (founder sign-off),
+             so no separate signature block here to avoid duplication. -->
 
         <!-- Footer -->
         <tr><td style="background:#fafafb;border-top:1px solid #ececf0;padding:18px 28px;">
