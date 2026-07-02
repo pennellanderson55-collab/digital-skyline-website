@@ -119,6 +119,25 @@ async function applyPayment(project, amountUnits, extra = {}) {
   })
 }
 
+// Loud, structured warning when an event maps to no project — so a real
+// payment can never silently vanish. Visible in Vercel logs; the event also
+// stays in `stripe_events` with a null project_id, and the HTTP response
+// reports matched:false (visible in Stripe's delivery log).
+function logUnmatched(event, obj, keys) {
+  console.warn(
+    '[stripe-webhook] UNMATCHED — no project found for this event.',
+    JSON.stringify({
+      event_id: event.id,
+      type: event.type,
+      stripe_object: obj?.id || null,
+      reference: keys.reference || null,
+      customer: keys.customerId || null,
+      email: keys.email || null,
+      amount: obj?.amount_total ?? obj?.amount_paid ?? null,
+    }),
+  )
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
@@ -153,6 +172,7 @@ export default async function handler(req, res) {
   }
 
   // 3. Handle the event. On any error, remove the ledger row so Stripe retries.
+  let matchedProjectId = null
   try {
     const obj = event.data.object
 
@@ -162,11 +182,11 @@ export default async function handler(req, res) {
         const customerId = typeof obj.customer === 'string' ? obj.customer : obj.customer?.id
         const email = obj.customer_details?.email || obj.customer_email
         const project = await findProject({ reference, customerId, email })
-        if (project) {
-          await applyPayment(project, centsToUnits(obj.amount_total), {
-            ...(customerId && !project.stripe_customer_id ? { stripe_customer_id: customerId } : {}),
-          })
-        }
+        if (!project) { logUnmatched(event, obj, { reference, customerId, email }); break }
+        matchedProjectId = project.id
+        await applyPayment(project, centsToUnits(obj.amount_total), {
+          ...(customerId && !project.stripe_customer_id ? { stripe_customer_id: customerId } : {}),
+        })
         break
       }
 
@@ -176,13 +196,13 @@ export default async function handler(req, res) {
         const customerId = typeof obj.customer === 'string' ? obj.customer : obj.customer?.id
         const email = obj.customer_email || obj.customer_details?.email
         const project = await findProject({ reference, customerId, email })
-        if (project) {
-          await applyPayment(project, centsToUnits(obj.amount_paid), {
-            stripe_invoice_status: obj.status || 'paid',
-            ...(obj.hosted_invoice_url ? { stripe_invoice_link: obj.hosted_invoice_url } : {}),
-            ...(customerId && !project.stripe_customer_id ? { stripe_customer_id: customerId } : {}),
-          })
-        }
+        if (!project) { logUnmatched(event, obj, { reference, customerId, email }); break }
+        matchedProjectId = project.id
+        await applyPayment(project, centsToUnits(obj.amount_paid), {
+          stripe_invoice_status: obj.status || 'paid',
+          ...(obj.hosted_invoice_url ? { stripe_invoice_link: obj.hosted_invoice_url } : {}),
+          ...(customerId && !project.stripe_customer_id ? { stripe_customer_id: customerId } : {}),
+        })
         break
       }
 
@@ -192,14 +212,14 @@ export default async function handler(req, res) {
         const customerId = typeof obj.customer === 'string' ? obj.customer : obj.customer?.id
         const email = obj.customer_email || obj.customer_details?.email
         const project = await findProject({ reference, customerId, email })
-        if (project) {
-          await patchProject(project.id, {
-            final_invoice_sent: true,
-            stripe_invoice_status: obj.status || 'open',
-            ...(obj.hosted_invoice_url ? { stripe_invoice_link: obj.hosted_invoice_url } : {}),
-            ...(customerId && !project.stripe_customer_id ? { stripe_customer_id: customerId } : {}),
-          })
-        }
+        if (!project) { logUnmatched(event, obj, { reference, customerId, email }); break }
+        matchedProjectId = project.id
+        await patchProject(project.id, {
+          final_invoice_sent: true,
+          stripe_invoice_status: obj.status || 'open',
+          ...(obj.hosted_invoice_url ? { stripe_invoice_link: obj.hosted_invoice_url } : {}),
+          ...(customerId && !project.stripe_customer_id ? { stripe_customer_id: customerId } : {}),
+        })
         break
       }
 
@@ -208,12 +228,12 @@ export default async function handler(req, res) {
         const customerId = typeof obj.customer === 'string' ? obj.customer : obj.customer?.id
         const email = obj.customer_email || obj.customer_details?.email
         const project = await findProject({ reference, customerId, email })
-        if (project) {
-          await patchProject(project.id, {
-            stripe_payment_status: 'failed',
-            stripe_invoice_status: obj.status || 'open',
-          })
-        }
+        if (!project) { logUnmatched(event, obj, { reference, customerId, email }); break }
+        matchedProjectId = project.id
+        await patchProject(project.id, {
+          stripe_payment_status: 'failed',
+          stripe_invoice_status: obj.status || 'open',
+        })
         break
       }
 
@@ -222,7 +242,16 @@ export default async function handler(req, res) {
         break
     }
 
-    return res.status(200).json({ ok: true, type: event.type })
+    // Link the ledger row to the matched project (unmatched stays project_id
+    // null, so unmatched payments are queryable in stripe_events after the fact).
+    if (matchedProjectId) {
+      await sb(`stripe_events?id=eq.${encodeURIComponent(event.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ project_id: matchedProjectId }),
+      }).catch(() => {})
+    }
+
+    return res.status(200).json({ ok: true, type: event.type, matched: Boolean(matchedProjectId) })
   } catch (e) {
     // Undo the idempotency record so the retry can reprocess this event.
     await sb(`stripe_events?id=eq.${encodeURIComponent(event.id)}`, { method: 'DELETE' }).catch(() => {})
