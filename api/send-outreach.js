@@ -55,10 +55,13 @@ export default async function handler(req, res) {
     body: text,
     prospect,
     links: {
-      book: `${SITE}/book?prospect=${encodeURIComponent(prospect.id || '')}`,
-      portfolio: `${SITE}/#portfolio`,
-      packages: `${SITE}/#packages`,
-      site: SITE,
+      // CTA destinations are pinned to the exact public pages the button text
+      // promises (www host). "Schedule" points to the consultation page rather
+      // than the prospect-specific /api/book link.
+      book: 'https://www.digitalskylineco.com/consultation',
+      portfolio: 'https://www.digitalskylineco.com/#portfolio',
+      packages: 'https://www.digitalskylineco.com/#pricing',
+      site: 'https://www.digitalskylineco.com',
     },
   })
 

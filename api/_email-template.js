@@ -42,10 +42,10 @@ function button(href, label, primary) {
 
 // Build the full HTML email. `links.book` is the prospect-specific booking URL.
 export function buildOutreachEmail({ subject = '', body = '', prospect = {}, links = {} }) {
-  const book = links.book || `${SITE}/book`
-  const portfolio = links.portfolio || `${SITE}/#portfolio`
-  const packages = links.packages || `${SITE}/#packages`
-  const site = links.site || SITE
+  const book = links.book || 'https://www.digitalskylineco.com/consultation'
+  const portfolio = links.portfolio || 'https://www.digitalskylineco.com/#portfolio'
+  const packages = links.packages || 'https://www.digitalskylineco.com/#pricing'
+  const site = links.site || 'https://www.digitalskylineco.com'
   const recipientName = prospect.owner_name || prospect.business_name || 'there'
 
   return `<!doctype html>
