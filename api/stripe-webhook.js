@@ -54,8 +54,13 @@ async function readRawBody(req) {
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 const centsToUnits = (c) => round2((Number(c) || 0) / 100)
 
-// Find the project this event belongs to.
-async function findProject({ reference, customerId }) {
+// Find the project this event belongs to. Matching order, most→least explicit:
+//   1. project_reference   (client_reference_id / metadata.project_reference)
+//   2. stripe_customer_id  (set on a prior synced event for this customer)
+//   3. customer email      (fallback) → the client with that email → their
+//                           most recent project. This catches real payments
+//                           where the client never typed the DS-YYYY-NNN ref.
+async function findProject({ reference, customerId, email }) {
   const tryGet = async (query) => {
     const r = await sb(`projects?${query}&select=*&limit=1`)
     if (!r.ok) return null
@@ -69,6 +74,18 @@ async function findProject({ reference, customerId }) {
   if (customerId) {
     const p = await tryGet(`stripe_customer_id=eq.${encodeURIComponent(customerId)}`)
     if (p) return p
+  }
+  if (email) {
+    // Case-insensitive client email → their newest project. Best-effort: if a
+    // client has several projects we credit the most recent one.
+    const cr = await sb(`clients?email=ilike.${encodeURIComponent(email)}&select=id&limit=10`)
+    if (cr.ok) {
+      const clients = await cr.json().catch(() => [])
+      for (const c of clients) {
+        const p = await tryGet(`client_id=eq.${c.id}&order=created_at.desc`)
+        if (p) return p
+      }
+    }
   }
   return null
 }
@@ -143,7 +160,8 @@ export default async function handler(req, res) {
       case 'checkout.session.completed': {
         const reference = obj.client_reference_id || obj.metadata?.project_reference
         const customerId = typeof obj.customer === 'string' ? obj.customer : obj.customer?.id
-        const project = await findProject({ reference, customerId })
+        const email = obj.customer_details?.email || obj.customer_email
+        const project = await findProject({ reference, customerId, email })
         if (project) {
           await applyPayment(project, centsToUnits(obj.amount_total), {
             ...(customerId && !project.stripe_customer_id ? { stripe_customer_id: customerId } : {}),
@@ -156,7 +174,8 @@ export default async function handler(req, res) {
       case 'invoice.payment_succeeded': {
         const reference = obj.metadata?.project_reference
         const customerId = typeof obj.customer === 'string' ? obj.customer : obj.customer?.id
-        const project = await findProject({ reference, customerId })
+        const email = obj.customer_email || obj.customer_details?.email
+        const project = await findProject({ reference, customerId, email })
         if (project) {
           await applyPayment(project, centsToUnits(obj.amount_paid), {
             stripe_invoice_status: obj.status || 'paid',
@@ -171,7 +190,8 @@ export default async function handler(req, res) {
       case 'invoice.sent': {
         const reference = obj.metadata?.project_reference
         const customerId = typeof obj.customer === 'string' ? obj.customer : obj.customer?.id
-        const project = await findProject({ reference, customerId })
+        const email = obj.customer_email || obj.customer_details?.email
+        const project = await findProject({ reference, customerId, email })
         if (project) {
           await patchProject(project.id, {
             final_invoice_sent: true,
@@ -186,7 +206,8 @@ export default async function handler(req, res) {
       case 'invoice.payment_failed': {
         const reference = obj.metadata?.project_reference
         const customerId = typeof obj.customer === 'string' ? obj.customer : obj.customer?.id
-        const project = await findProject({ reference, customerId })
+        const email = obj.customer_email || obj.customer_details?.email
+        const project = await findProject({ reference, customerId, email })
         if (project) {
           await patchProject(project.id, {
             stripe_payment_status: 'failed',
