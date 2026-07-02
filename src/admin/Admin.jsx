@@ -5,7 +5,6 @@ import Clients from './Clients.jsx'
 import Projects from './Projects.jsx'
 import Support, { SupportModal } from './Support.jsx'
 import ProjectProfile from './ProjectProfile.jsx'
-import Settings from './Settings.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import { INITIAL_PROJECT_STAGE, balanceDue, fmtMoney, fmtDateTime } from './ops.js'
 import { sendEmail } from '../lib/email.js'
@@ -19,6 +18,7 @@ import SalesAnalytics from './sales/SalesAnalytics.jsx'
 import SendingQueue from './sales/SendingQueue.jsx'
 import ProspectPanel from './sales/ProspectPanel.jsx'
 import PerformanceDashboard from './dashboard/Dashboard.jsx'
+import SettingsHub from './settings/SettingsHub.jsx'
 
 // Admin navigation — grouped sidebar. Operations = the existing modules;
 // Sales = the new Outreach CRM (expandable). Keys are unique across groups.
@@ -699,7 +699,7 @@ function Dashboard({ session }) {
               {nav === 'Settings' && (
                 <>
                   {prospectsError && <p className="mb-4 rounded-xl border border-rose-400/30 bg-rose-400/[0.06] px-4 py-3 text-sm text-rose-200">{prospectsError}</p>}
-                  <Settings prospects={prospects} onDeleteProspect={deleteProspect} />
+                  <SettingsHub prospects={prospects} onDeleteProspect={deleteProspect} />
                 </>
               )}
             </>
