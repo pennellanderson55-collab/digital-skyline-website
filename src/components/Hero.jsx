@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Arrow, Sparkle } from './Icons.jsx'
+import { prefersReducedMotion, isTouchPrimary } from '../lib/device.js'
 
 const CAPABILITIES = [
   'Custom Websites',
@@ -8,9 +9,13 @@ const CAPABILITIES = [
   'Business Systems',
 ]
 
-const reduced =
-  typeof window !== 'undefined' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reduced = prefersReducedMotion
+
+// The scroll-scrubbed 18 MB hero video + per-frame seek loop is desktop-only.
+// On touch/mobile (or reduced-motion) we render a lightweight static branded
+// backdrop instead — no video download, no scroll rAF — so the hero paints
+// instantly and stays smooth. Desktop keeps the full cinematic scrub.
+const scrub = !reduced && !isTouchPrimary
 
 /* ◆ Scrub distance. The hero is this tall; the inner stage is pinned (sticky)
    for the first 100vh and the remaining height is the scroll runway that maps
@@ -132,7 +137,7 @@ export default function Hero() {
       ref={sectionRef}
       id="top"
       className="relative"
-      style={{ height: reduced ? '100vh' : SCRUB_HEIGHT }}
+      style={{ height: scrub ? SCRUB_HEIGHT : '100vh' }}
     >
       {/* Pinned cinematic stage */}
       <div
@@ -141,17 +146,32 @@ export default function Hero() {
         style={{ '--mx': '0', '--my': '0' }}
       >
 
-        {/* Scroll-scrubbed city video — full-bleed background, reverse on scroll */}
-        <video
-          ref={videoRef}
-          src="/ds-city.mp4"
-          muted
-          playsInline
-          preload="auto"
-          aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover"
-          style={{ transformOrigin: 'center center', willChange: 'transform' }}
-        />
+        {/* Scroll-scrubbed city video — full-bleed background, reverse on scroll
+            (desktop only; the scrub loop drives currentTime from scroll). */}
+        {scrub ? (
+          <video
+            ref={videoRef}
+            src="/ds-city.mp4"
+            muted
+            playsInline
+            preload="auto"
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ transformOrigin: 'center center', willChange: 'transform' }}
+          />
+        ) : (
+          /* Mobile / reduced-motion: static branded backdrop — no video bytes. */
+          <div
+            className="absolute inset-0"
+            aria-hidden="true"
+            style={{
+              background:
+                'radial-gradient(115% 90% at 72% 18%, rgba(212,175,55,0.12) 0%, transparent 55%),' +
+                'radial-gradient(100% 80% at 15% 95%, rgba(90,120,180,0.10) 0%, transparent 60%),' +
+                '#050506',
+            }}
+          />
+        )}
 
         {/* Mouse-reactive depth layers — multiple parallax planes for a 3D feel */}
         {!reduced && (

@@ -1,8 +1,11 @@
 import { useEffect, useRef } from "react";
+import { prefersReducedMotion, isTouchPrimary } from "../lib/device.js";
 
-const reduced =
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const reduced = prefersReducedMotion;
+// Heavy always-on ambiance (rAF particle canvas, animated light beams, holo
+// scan-lines) is desktop-only. Touch/mobile keeps just the static gold orbs so
+// the page stays cheap to composite. Desktop is unchanged.
+const heavy = !reduced && !isTouchPrimary;
 
 const STYLE_ID = "ds-ambient-css";
 
@@ -131,7 +134,7 @@ export default function AmbientCanvas() {
   }, []);
 
   useEffect(() => {
-    if (reduced) return;
+    if (!heavy) return; // no particle rAF on mobile / reduced-motion
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -220,37 +223,47 @@ export default function AmbientCanvas() {
 
   if (reduced) return null;
 
+  // Mobile: static gold orbs only (animation disabled → rastered once, not
+  // re-composited each frame). Desktop: the full animated ambiance.
+  const orbStyle = heavy ? undefined : { animation: "none" };
+
   return (
     <>
-      <canvas
-        ref={canvasRef}
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 2,
-          pointerEvents: "none",
-          width: "100%",
-          height: "100%",
-        }}
-        aria-hidden="true"
-      />
+      {heavy && (
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2,
+            pointerEvents: "none",
+            width: "100%",
+            height: "100%",
+          }}
+          aria-hidden="true"
+        />
+      )}
 
-      <div aria-hidden="true" style={{ pointerEvents: "none" }}>
-        <div className="ds-ambient-beam" />
-        <div className="ds-ambient-beam" />
-        <div className="ds-ambient-beam" />
-      </div>
+      {heavy && (
+        <div aria-hidden="true" style={{ pointerEvents: "none" }}>
+          <div className="ds-ambient-beam" />
+          <div className="ds-ambient-beam" />
+          <div className="ds-ambient-beam" />
+        </div>
+      )}
 
-      <div aria-hidden="true" style={{ pointerEvents: "none" }}>
-        <div className="ds-holo-scan" />
-        <div className="ds-holo-scan" />
-        <div className="ds-holo-scan" />
-      </div>
+      {heavy && (
+        <div aria-hidden="true" style={{ pointerEvents: "none" }}>
+          <div className="ds-holo-scan" />
+          <div className="ds-holo-scan" />
+          <div className="ds-holo-scan" />
+        </div>
+      )}
 
-      {/* moving gradient orbs */}
+      {/* gradient orbs — animated on desktop, static on mobile */}
       <div aria-hidden="true" style={{ pointerEvents: "none" }}>
-        <div className="ds-amb-orb ds-amb-orb-1" />
-        <div className="ds-amb-orb ds-amb-orb-2" />
+        <div className="ds-amb-orb ds-amb-orb-1" style={orbStyle} />
+        <div className="ds-amb-orb ds-amb-orb-2" style={orbStyle} />
       </div>
     </>
   );

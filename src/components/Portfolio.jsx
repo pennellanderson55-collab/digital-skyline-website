@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import SectionHeading from './SectionHeading.jsx'
 import { Arrow, Play, Image } from './Icons.jsx'
+import { isTouchPrimary } from '../lib/device.js'
 
 /* ----------------------------------------------------------------------------
  * Visual Proof gallery — a pinned horizontal-scroll rail.
@@ -49,17 +50,25 @@ const ITEMS = [
  */
 function LazyCardVideo({ item, onError }) {
   const ref = useRef(null)
-  const [load, setLoad] = useState(false) // becomes true on first view → attaches src
+  const [load, setLoad] = useState(false) // desktop: attach src + autoplay preview on view
+  const [seen, setSeen] = useState(false) // attach poster only once in view (defers poster bytes)
 
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    if (typeof IntersectionObserver === 'undefined') { setLoad(true); return }
+    if (typeof IntersectionObserver === 'undefined') {
+      setSeen(true)
+      if (!isTouchPrimary) setLoad(true)
+      return
+    }
     const io = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setLoad(true)
-          el.play?.().catch(() => {})
+          setSeen(true)
+          // On touch/mobile we NEVER auto-stream card videos (some are tens of
+          // MB) — the poster is enough; tapping opens the full clip in the
+          // lightbox. Desktop keeps the autoplaying hover-preview.
+          if (!isTouchPrimary) { setLoad(true); el.play?.().catch(() => {}) }
         } else {
           el.pause?.()
         }
@@ -74,12 +83,12 @@ function LazyCardVideo({ item, onError }) {
     <video
       ref={ref}
       src={load ? item.src : undefined}
-      poster={item.poster}
+      poster={seen ? item.poster : undefined}
       muted
       loop
       playsInline
       preload="none"
-      onCanPlay={(e) => { e.currentTarget.play?.().catch(() => {}) }}
+      onCanPlay={isTouchPrimary ? undefined : (e) => { e.currentTarget.play?.().catch(() => {}) }}
       onError={onError}
       className="absolute inset-0 h-full w-full"
       style={{ objectFit: item.fit || 'cover', objectPosition: item.pos || 'center' }}

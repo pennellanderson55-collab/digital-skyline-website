@@ -11,6 +11,10 @@ import {
  * (back button) rather than a modal. The Project Reference is shown as the
  * master identifier connecting every section below.
  */
+// Pretty-print a Stripe status code ("payment_succeeded" → "Payment Succeeded").
+const stripeLabel = (s) =>
+  s ? s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—'
+
 export default function ProjectProfile({ project, history = [], onClose, onSaveProject, onSaveClient, onStageChange, onRevert, onDelete }) {
   const client = project.client || {}
 
@@ -239,6 +243,26 @@ export default function ProjectProfile({ project, history = [], onClose, onSaveP
             <Toggle label="Final Invoice Paid" checked={!!projForm.final_invoice_paid} onChange={setPBool('final_invoice_paid')} />
             <Toggle label="Paid In Full" checked={!!projForm.paid_in_full} onChange={setPBool('paid_in_full')} />
           </div>
+          {/* Live status synced from Stripe by the webhook (read-only). */}
+          <div className="mt-5 border-t border-white/[0.08] pt-5">
+            <h4 className="font-mono text-[11px] uppercase tracking-wider text-gold-300">Stripe — Synced Automatically</h4>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <Readout label="Payment Status" value={stripeLabel(project.stripe_payment_status)} />
+              <Readout label="Invoice Status" value={stripeLabel(project.stripe_invoice_status)} />
+              <Readout label="Amount Paid (synced)" value={fmtMoney(project.amount_paid)} />
+              <Readout label="Last Payment" value={project.last_payment_at ? fmtDateTime(project.last_payment_at) : '—'} />
+            </div>
+            {project.stripe_invoice_link && (
+              <a href={project.stripe_invoice_link} target="_blank" rel="noreferrer"
+                className="mt-3 inline-block text-xs text-gold-200 hover:underline">
+                View latest Stripe invoice →
+              </a>
+            )}
+            <p className="mt-2 text-[11px] text-gray-500">
+              Updated automatically when Stripe reports a payment or invoice change. The fields below are still editable for manual overrides.
+            </p>
+          </div>
+
           <div className="mt-5 border-t border-white/[0.08] pt-5">
             <h4 className="font-mono text-[11px] uppercase tracking-wider text-gray-500">Stripe (manual entry)</h4>
             <div className="mt-3 space-y-3">

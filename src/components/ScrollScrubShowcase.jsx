@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { prefersReducedMotion, isTouchPrimary } from '../lib/device.js'
 
 /* ============================================================
  * "In Motion" — the globe spins continuously and smoothly.
@@ -7,11 +8,14 @@ import { useEffect, useRef } from 'react'
  * clip), we PLAY the video and modulate its playbackRate from
  * the user's scroll / swipe / drag velocity — so the faster you
  * move, the faster the globe spins, always butter-smooth.
+ *
+ * The 17 MB clip + velocity rAF is desktop-only. On touch/mobile
+ * (or reduced-motion) we show a static branded backdrop instead —
+ * no video download, no rAF — keeping the section light on phones.
  * ============================================================ */
 
-const reduced =
-  typeof window !== 'undefined' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reduced = prefersReducedMotion
+const play = !reduced && !isTouchPrimary
 
 const IDLE = 0.35 // gentle continuous spin when idle
 const MAX = 2.25 // fastest spin — kept low so frame decoding stays smooth
@@ -128,22 +132,36 @@ export default function ScrollScrubShowcase() {
     <section
       ref={sectionRef}
       className="relative h-screen w-full select-none overflow-hidden bg-ink-950"
-      style={{ cursor: reduced ? 'default' : 'grab' }}
+      style={{ cursor: play ? 'grab' : 'default' }}
     >
-      {/* preload="none" + no autoPlay: the IntersectionObserver below starts
-          playback (and the download) only once the section is in view, and
-          pauses it when it scrolls away — so this 17MB clip costs nothing until
-          a visitor actually reaches it. Visual behavior is unchanged. */}
-      <video
-        ref={videoRef}
-        src="/ds-city-1.mp4"
-        muted
-        loop
-        playsInline
-        preload="none"
-        aria-hidden="true"
-        className="absolute inset-0 h-full w-full object-cover"
-      />
+      {/* preload="none" + no autoPlay: the IntersectionObserver in the effect
+          starts playback (and the download) only once the section is in view,
+          and pauses it when it scrolls away — so this 17MB clip costs nothing
+          until a visitor reaches it. On touch/mobile we skip the video entirely
+          and show a static branded backdrop. */}
+      {play ? (
+        <video
+          ref={videoRef}
+          src="/ds-city-1.mp4"
+          muted
+          loop
+          playsInline
+          preload="none"
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : (
+        <div
+          className="absolute inset-0"
+          aria-hidden="true"
+          style={{
+            background:
+              'radial-gradient(90% 70% at 50% 42%, rgba(212,175,55,0.14) 0%, transparent 58%),' +
+              'radial-gradient(120% 90% at 80% 90%, rgba(90,120,180,0.10) 0%, transparent 60%),' +
+              '#050506',
+          }}
+        />
+      )}
 
       {/* legibility wash */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/40 to-ink-950/60" aria-hidden="true" />

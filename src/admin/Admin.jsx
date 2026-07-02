@@ -277,6 +277,24 @@ function Dashboard({ session }) {
   // the dashboard stat row is populated on Home (prospects also feed Sales views).
   useEffect(() => { load(); loadProspects(); loadOutreachCounts() }, [])
 
+  // Live payment sync — the Stripe webhook writes to `projects`, so subscribing
+  // to row changes makes payment status update in the open dashboard with no
+  // manual Refresh. Best-effort: if Realtime isn't enabled on the table (run
+  // sprint7_stripe_sync.sql) this simply never fires; Refresh still works.
+  useEffect(() => {
+    if (!supabase) return
+    const ch = supabase
+      .channel('admin-projects-sync')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects' }, (payload) => {
+        const row = payload.new
+        if (!row?.id) return
+        setProjects((ps) => ps.map((p) => (p.id === row.id ? { ...p, ...row } : p)))
+        setActiveProject((a) => (a && a.id === row.id ? { ...a, ...row } : a))
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
+
   // ── Sales / Outreach CRM data ──────────────────────────────────────────
   const loadProspects = async () => {
     setProspectsLoading(true)
