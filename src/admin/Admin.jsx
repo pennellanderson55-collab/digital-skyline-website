@@ -18,6 +18,7 @@ import FollowUps from './sales/FollowUps.jsx'
 import SalesAnalytics from './sales/SalesAnalytics.jsx'
 import SendingQueue from './sales/SendingQueue.jsx'
 import ProspectPanel from './sales/ProspectPanel.jsx'
+import PerformanceDashboard from './dashboard/Dashboard.jsx'
 
 // Admin navigation — grouped sidebar. Operations = the existing modules;
 // Sales = the new Outreach CRM (expandable). Keys are unique across groups.
@@ -674,7 +675,16 @@ function Dashboard({ session }) {
             />
           ) : (
             <>
-              {nav === 'Home' && <Home consultations={rows} clients={clients} projects={projects} support={support} history={history} prospects={prospects} outreach={outreachCounts} />}
+              {nav === 'Home' && (
+                <PerformanceDashboard
+                  consultations={rows} clients={clients} projects={projects} support={support}
+                  history={history} prospects={prospects} outreach={outreachCounts}
+                  userEmail={session.user.email}
+                  onNavigate={openNav}
+                  onRefresh={() => { load(); loadProspects(); loadOutreachCounts() }}
+                  onOpenProject={setActiveProject}
+                />
+              )}
               {nav === 'Consultations' && (
                 <Consultations
                   rows={rows} onOpen={setActive} onStatus={updateRow}
@@ -793,124 +803,6 @@ function NavItem({ item, active, onClick }) {
       {Icon && <Icon className="h-4 w-4 shrink-0" />}
       {item.label}
     </button>
-  )
-}
-
-/* ------------------------------------------------------------------- home */
-
-// Statuses that count as a booked consultation / a closed client in the funnel.
-const FUNNEL_CONSULT = ['Consultation Booked', 'Consultation Scheduled', 'Consultation Completed']
-const FUNNEL_CLOSED = ['Won', 'Client']
-
-function Home({ consultations, clients, projects, support, history, prospects = [], outreach = {} }) {
-  // Sales funnel row (top of dashboard). New Leads / Consultations Booked /
-  // Clients Closed / Close Rate come from the Prospects CRM; Emails Sent and
-  // Replies are real counts from outreach_drafts (sent_at / replied_at).
-  const funnel = useMemo(() => {
-    const newLeads = prospects.filter((p) => p.status === 'New Lead').length
-    const consults = prospects.filter((p) => FUNNEL_CONSULT.includes(p.status)).length
-    const closed = prospects.filter((p) => FUNNEL_CLOSED.includes(p.status)).length
-    const total = prospects.length
-    const closeRate = total ? Math.round((closed / total) * 100) : 0
-    return [
-      { label: 'New Leads', value: newLeads },
-      { label: 'Emails Sent', value: outreach.sent == null ? '—' : outreach.sent },
-      { label: 'Replies', value: outreach.replies == null ? '—' : outreach.replies },
-      { label: 'Consultations Booked', value: consults },
-      { label: 'Clients Closed', value: closed },
-      { label: 'Close Rate', value: `${closeRate}%` },
-    ]
-  }, [prospects, outreach])
-
-  const { kpis, activity } = useMemo(() => {
-    const now = new Date()
-    const sameMonth = (d) => d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-
-    const activeLeads = consultations.filter(
-      (r) => !r.converted && r.status !== 'Closed Won' && r.status !== 'Closed Lost'
-    ).length
-    const inProgress = projects.filter((p) => p.stage !== 'Completed' && p.stage !== 'Lead').length
-    const launching = projects.filter((p) => p.launch_date && sameMonth(new Date(p.launch_date))).length
-    const openTickets = support.filter((s) => s.status !== 'Resolved' && s.status !== 'Closed').length
-    const revenue = projects.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0)
-    const outstanding = projects.reduce((sum, p) => sum + balanceDue(p), 0)
-
-    const kpis = [
-      { label: 'Active Leads', value: activeLeads },
-      { label: 'Active Clients', value: clients.length },
-      { label: 'Projects In Progress', value: inProgress },
-      { label: 'Launching This Month', value: launching },
-      { label: 'Open Support Tickets', value: openTickets },
-      { label: 'Revenue Closed', value: fmtMoney(revenue) },
-      { label: 'Outstanding Balance', value: fmtMoney(outstanding) },
-    ]
-
-    // Recent activity feed — merge events across the system, newest first.
-    const events = []
-    consultations.forEach((r) => events.push({ at: r.created_at, kind: 'Consultation', label: `New consultation — ${r.name}` }))
-    clients.forEach((c) => events.push({ at: c.created_at, kind: 'Client', label: `New client — ${c.company_name || c.contact_name}` }))
-    support.forEach((s) => events.push({ at: s.created_at, kind: 'Support', label: `Support request — ${s.client_name || s.email}` }))
-    history.forEach((h) => events.push({ at: h.changed_at, kind: 'Project', label: `${h.project_reference} → ${h.stage}` }))
-    const activity = events
-      .filter((e) => e.at)
-      .sort((a, b) => new Date(b.at) - new Date(a.at))
-      .slice(0, 10)
-
-    return { kpis, activity }
-  }, [consultations, clients, projects, support, history])
-
-  const KIND_STYLES = {
-    Consultation: 'text-sky-200',
-    Client: 'text-emerald-200',
-    Support: 'text-amber-200',
-    Project: 'text-violet-200',
-  }
-
-  return (
-    <div className="space-y-8">
-      {/* Sales funnel — top statistics row */}
-      <div>
-        <div className="eyebrow mb-3"><Chart className="h-3.5 w-3.5" /> Sales Funnel</div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {funnel.map((s) => (
-            <div key={s.label} className="card-surface p-5 shadow-card">
-              <div className="font-display text-2xl font-bold text-gold-gradient md:text-3xl">{s.value}</div>
-              <div className="mt-1.5 text-xs leading-tight text-gray-400">{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((s) => (
-          <div key={s.label} className="card-surface p-6 shadow-card">
-            <div className="font-display text-3xl font-bold text-gold-gradient">{s.value}</div>
-            <div className="mt-2 text-sm text-gray-400">{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="card-surface p-6 shadow-card">
-        <h3 className="font-display text-lg font-semibold text-gray-50">Recent Activity</h3>
-        {activity.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-500">No activity yet.</p>
-        ) : (
-          <ul className="mt-4 divide-y divide-white/[0.06]">
-            {activity.map((e, i) => (
-              <li key={i} className="flex items-center justify-between gap-4 py-3">
-                <div className="flex items-center gap-3">
-                  <span className={`font-mono text-[10px] uppercase tracking-wider ${KIND_STYLES[e.kind] || 'text-gray-400'}`}>
-                    {e.kind}
-                  </span>
-                  <span className="text-sm text-gray-200">{e.label}</span>
-                </div>
-                <span className="shrink-0 font-mono text-[11px] text-gray-500">{fmtDateTime(e.at)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
   )
 }
 
