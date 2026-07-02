@@ -3,9 +3,10 @@ import { Plus, Arrow } from '../../components/Icons.jsx'
 import { SearchBar, Th, Td, Empty } from '../Clients.jsx'
 import ProspectPanel from './ProspectPanel.jsx'
 import ProspectForm from './ProspectForm.jsx'
+import DuplicateWarning from './DuplicateWarning.jsx'
 import {
   PROSPECT_STATUSES, prospectStatusStyle, INDUSTRIES, scoreBand, ratingStars,
-  fmtDate, isFollowUpDue, fmtMoney,
+  fmtDate, isFollowUpDue, fmtMoney, findProspectDuplicates,
 } from './prospects.js'
 
 const SORTS = ['Newest', 'Oldest', 'Name A–Z', 'Website Score ↑', 'Rating ↓']
@@ -28,6 +29,7 @@ export default function Prospects({ prospects, loading, error, onAdd, onUpdate, 
   const [selected, setSelected] = useState(null)
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [dupWarn, setDupWarn] = useState(null) // { patch, matches } — pending add with duplicates
 
   // Keep the open panel in sync with the latest data after an edit.
   const selectedLive = selected ? prospects.find((p) => p.id === selected.id) || null : null
@@ -72,11 +74,21 @@ export default function Prospects({ prospects, loading, error, onAdd, onUpdate, 
   const pageRows = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize)
   const resetPage = (fn) => (v) => { fn(v); setPage(0) }
 
+  // Duplicate check runs BEFORE the insert. If any existing lead matches on
+  // business name / website / email / phone, warn first; the admin can still
+  // choose "Save Anyway" to intentionally keep the duplicate.
   const add = async (patch) => {
+    const matches = findProspectDuplicates(patch, prospects)
+    if (matches.length) { setDupWarn({ patch, matches }); return }
+    await doAdd(patch)
+  }
+
+  const doAdd = async (patch) => {
     setBusy(true)
     await onAdd(patch)
     setBusy(false)
     setAdding(false)
+    setDupWarn(null)
     setPage(0)
   }
 
@@ -178,6 +190,17 @@ export default function Prospects({ prospects, loading, error, onAdd, onUpdate, 
             <ProspectForm onSubmit={add} onCancel={() => setAdding(false)} submitLabel="Add prospect" busy={busy} />
           </div>
         </div>
+      )}
+
+      {/* Duplicate warning — shown when the pending add matches an existing lead */}
+      {dupWarn && (
+        <DuplicateWarning
+          matches={dupWarn.matches}
+          busy={busy}
+          onViewExisting={(p) => { setSelected(p); setDupWarn(null); setAdding(false) }}
+          onSaveAnyway={() => doAdd(dupWarn.patch)}
+          onCancel={() => setDupWarn(null)}
+        />
       )}
 
       {/* Detail slide-over */}

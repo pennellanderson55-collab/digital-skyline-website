@@ -181,7 +181,7 @@ export default function Settings({ prospects = [], onDeleteProspect }) {
           )}
           {showAll && (
             <p className="mt-2 text-[11px] text-amber-300/80">
-              Advanced view shows every prospect. Deleting a real prospect cannot be undone — each still requires confirmation.
+              Advanced view shows every prospect. Deletes are soft (recoverable in the database) — each still requires confirmation.
             </p>
           )}
         </div>
@@ -236,8 +236,8 @@ export default function Settings({ prospects = [], onDeleteProspect }) {
           confirmLabel="Delete prospect"
         >
           <p className="text-sm text-gray-400">
-            “{confirmProspect.business_name || 'This prospect'}” and its outreach drafts will be permanently removed.
-            This cannot be undone.
+            “{confirmProspect.business_name || 'This prospect'}” will be removed from your prospect lists.
+            This is a soft delete — the record is retained in the database and can be restored.
           </p>
           {!isLikelyTest(confirmProspect) && (
             <p className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/[0.06] px-3 py-2 text-xs text-amber-200">

@@ -6,8 +6,11 @@ import Projects from './Projects.jsx'
 import Support, { SupportModal } from './Support.jsx'
 import ProjectProfile from './ProjectProfile.jsx'
 import Settings from './Settings.jsx'
+import ConfirmDialog from './ConfirmDialog.jsx'
 import { INITIAL_PROJECT_STAGE, balanceDue, fmtMoney, fmtDateTime } from './ops.js'
 import { sendEmail } from '../lib/email.js'
+import { findProspectDuplicates, prospectFromConsultation } from './sales/prospects.js'
+import DuplicateWarning from './sales/DuplicateWarning.jsx'
 import SalesDashboard from './sales/SalesDashboard.jsx'
 import Prospects from './sales/Prospects.jsx'
 import SalesPipeline from './sales/SalesPipeline.jsx'
@@ -81,6 +84,27 @@ const fmtDate = (iso) => {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   })
 }
+
+// Select active (non-soft-deleted) rows, newest first. Falls back to an
+// unfiltered query if the `deleted_at` column doesn't exist yet (before the
+// sprint6 migration is run) so the dashboard never breaks.
+async function selectActive(table, select) {
+  const build = (withFilter) => {
+    let q = supabase.from(table).select(select)
+    if (withFilter) q = q.is('deleted_at', null)
+    return q.order('created_at', { ascending: false })
+  }
+  let res = await build(true)
+  if (res.error && /deleted_at|column .* does not exist/i.test(res.error.message)) res = await build(false)
+  return res
+}
+
+// True when an error is caused by the soft-delete columns not existing yet.
+const isMissingSoftDelete = (msg = '') => /deleted_at|source_consultation_id|column .* does not exist/i.test(msg)
+const softDeleteHint = (msg = '') =>
+  isMissingSoftDelete(msg)
+    ? 'This needs the soft-delete columns. Run supabase/sprint6_admin_soft_delete.sql in Supabase, then Refresh.'
+    : msg
 
 export default function Admin() {
   const [session, setSession] = useState(null)
@@ -202,6 +226,11 @@ function Dashboard({ session }) {
   // (sent_at / replied_at). Count-only queries (head:true) so egress stays tiny.
   const [outreachCounts, setOutreachCounts] = useState({ sent: null, replies: null })
 
+  // Operations delete confirmation + Move-to-Sales duplicate warning + notice.
+  const [pendingDelete, setPendingDelete] = useState(null) // { title, description, details, note, confirmLabel, onConfirm }
+  const [pendingMove, setPendingMove] = useState(null)      // { consultation, matches }
+  const [opsNotice, setOpsNotice] = useState('')
+
   // Derive the client list from the projects join (clients 1──1 project for now).
   const clients = useMemo(() => {
     const map = new Map()
@@ -213,11 +242,13 @@ function Dashboard({ session }) {
     setLoading(true)
     // Consultations are required (existing system). The Phase-2 tables are
     // loaded best-effort so the dashboard still works before ops.sql is run.
-    const cons = await supabase.from('consultations').select('*').order('created_at', { ascending: false })
+    // `.is('deleted_at', null)` hides soft-deleted rows, but falls back cleanly
+    // if the sprint6 migration hasn't been run yet (column doesn't exist).
+    const cons = await selectActive('consultations', '*')
     if (cons.error) setError(cons.error.message)
     else setRows(cons.data || [])
 
-    const proj = await supabase.from('projects').select('*, client:clients(*)').order('created_at', { ascending: false })
+    const proj = await selectActive('projects', '*, client:clients(*)')
     if (!proj.error) setProjects(proj.data || [])
 
     const sup = await supabase.from('support_requests').select('*').order('created_at', { ascending: false })
@@ -252,11 +283,14 @@ function Dashboard({ session }) {
     setProspectsError('')
     // Ordered + bounded so the query stays cheap and is pagination-ready
     // (the Prospects table paginates client-side over this set for now).
-    const res = await supabase
-      .from('prospects')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(1000)
+    // Soft-deleted prospects are hidden, with a fallback if sprint6 isn't run.
+    const buildProspects = (withFilter) => {
+      let q = supabase.from('prospects').select('*')
+      if (withFilter) q = q.is('deleted_at', null)
+      return q.order('created_at', { ascending: false }).limit(1000)
+    }
+    let res = await buildProspects(true)
+    if (res.error && isMissingSoftDelete(res.error.message)) res = await buildProspects(false)
     if (res.error) {
       setProspectsError(
         /relation .* does not exist/i.test(res.error.message)
@@ -282,6 +316,8 @@ function Dashboard({ session }) {
   const friendlyProspectError = (msg = '') => {
     if (/check constraint .*status|violates check constraint .*status/i.test(msg))
       return 'That status was rejected by the database. Run supabase/sprint4_pipeline.sql in Supabase to enable the new pipeline statuses, then Refresh.'
+    if (/source_consultation_id|deleted_at/i.test(msg))
+      return 'This needs the sprint6 columns. Run supabase/sprint6_admin_soft_delete.sql in Supabase, then Refresh.'
     if (/column .* does not exist/i.test(msg))
       return 'A pipeline column is missing. Run supabase/sprint4_pipeline.sql in Supabase, then Refresh.'
     if (/violates check constraint/i.test(msg))
@@ -303,12 +339,13 @@ function Dashboard({ session }) {
     if (data) setProspects((ps) => ps.map((p) => (p.id === id ? data : p)))
   }
 
+  // Soft delete — sets deleted_at (recoverable in the DB), never a hard DELETE.
   const deleteProspect = async (id) => {
     const prev = prospects
     setProspects((ps) => ps.filter((p) => p.id !== id))
     setActiveProspect((a) => (a && a.id === id ? null : a))
-    const { error: e } = await supabase.from('prospects').delete().eq('id', id)
-    if (e) { setProspectsError(e.message); setProspects(prev) }
+    const { error: e } = await supabase.from('prospects').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+    if (e) { setProspectsError(friendlyProspectError(e.message)); setProspects(prev) }
   }
 
   const updateRow = async (id, patch) => {
@@ -317,6 +354,69 @@ function Dashboard({ session }) {
     const { error } = await supabase.from('consultations').update(patch).eq('id', id)
     if (error) { setError(error.message); load() }
   }
+
+  // ── Soft delete: Consultation (Operations) ─────────────────────────────────
+  const deleteConsultation = async (id) => {
+    const prev = rows
+    setRows((rs) => rs.filter((r) => r.id !== id))
+    setActive((a) => (a && a.id === id ? null : a))
+    const { error } = await supabase.from('consultations').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+    if (error) { setError(softDeleteHint(error.message)); setRows(prev) }
+  }
+
+  // ── Soft delete: Project + its Client (covers the Projects & Clients tabs) ──
+  const deleteProjectAndClient = async (project) => {
+    const prev = projects
+    setProjects((ps) => ps.filter((p) => p.id !== project.id))
+    setActiveProject((a) => (a && a.id === project.id ? null : a))
+    const nowISO = new Date().toISOString()
+    const { error: pErr } = await supabase.from('projects').update({ deleted_at: nowISO }).eq('id', project.id)
+    let cErr = null
+    if (project.client_id) {
+      const r = await supabase.from('clients').update({ deleted_at: nowISO }).eq('id', project.client_id)
+      cErr = r.error
+    }
+    if (pErr || cErr) { setError(softDeleteHint((pErr || cErr).message)); setProjects(prev) }
+  }
+
+  // ── Move to Sales: Consultation (Operations) → Prospect (Sales) ────────────
+  const insertProspectFromConsultation = async (c) => {
+    const today = new Date().toISOString().slice(0, 10)
+    const patch = prospectFromConsultation(c, today)
+    const { data, error: e } = await supabase.from('prospects').insert(patch).select().single()
+    if (e) { setProspectsError(friendlyProspectError(e.message)); return null }
+    setProspects((ps) => [data, ...ps])
+    return data
+  }
+
+  const doMoveToSales = async (c) => {
+    setPendingMove(null)
+    const created = await insertProspectFromConsultation(c)
+    if (created) setOpsNotice(`Moved “${c.business || c.name || 'this lead'}” into Sales as a prospect.`)
+  }
+
+  // Duplicate pre-check before moving — warns if a matching prospect exists.
+  const requestMoveToSales = (c) => {
+    setOpsNotice('')
+    const candidate = prospectFromConsultation(c)
+    const matches = findProspectDuplicates(candidate, prospects)
+    if (matches.length) { setPendingMove({ consultation: c, matches }); return }
+    doMoveToSales(c)
+  }
+
+  const requestDeleteConsultation = (c) => setPendingDelete({
+    title: 'Delete this consultation?',
+    description: 'It will be removed from your Consultations list. This is a soft delete — the record is retained in the database and can be restored.',
+    details: [
+      ['Contact', c.name],
+      ['Business', c.business],
+      ['Email', c.email],
+      ['Phone', c.phone],
+      ['Date', c.date ? fmtDate(c.date) : null],
+    ],
+    confirmLabel: 'Delete consultation',
+    onConfirm: () => deleteConsultation(c.id),
+  })
 
   const updateProject = async (id, patch) => {
     setProjects((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)))
@@ -509,6 +609,12 @@ function Dashboard({ session }) {
         {/* content */}
         <div className="min-w-0 flex-1">
           {error && !isSales && <p className="mb-4 text-sm text-rose-400">{error}</p>}
+          {opsNotice && !isSales && (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] px-4 py-3 text-sm text-emerald-200">
+              <span>{opsNotice}</span>
+              <button onClick={() => { setOpsNotice(''); openNav('sales:prospects') }} className="btn-ghost shrink-0 px-3 py-1.5 text-xs">View in Sales</button>
+            </div>
+          )}
 
           {/* Sales / Outreach CRM */}
           {isSales ? (
@@ -546,12 +652,16 @@ function Dashboard({ session }) {
               onSaveClient={(patch) => updateClient(activeProject.client_id, patch)}
               onStageChange={(stage) => changeStage(activeProject, stage)}
               onRevert={() => revertToLead(activeProject)}
+              onDelete={() => deleteProjectAndClient(activeProject)}
             />
           ) : (
             <>
               {nav === 'Home' && <Home consultations={rows} clients={clients} projects={projects} support={support} history={history} prospects={prospects} outreach={outreachCounts} />}
               {nav === 'Consultations' && (
-                <Consultations rows={rows} onOpen={setActive} onStatus={updateRow} />
+                <Consultations
+                  rows={rows} onOpen={setActive} onStatus={updateRow}
+                  onMoveToSales={requestMoveToSales} onDelete={requestDeleteConsultation}
+                />
               )}
               {nav === 'Pipeline' && <Pipeline rows={rows} onStatus={updateRow} onOpen={setActive} />}
               {nav === 'Clients' && <Clients projects={projects} onOpen={setActiveProject} />}
@@ -586,6 +696,29 @@ function Dashboard({ session }) {
           onClose={() => setActiveSupport(null)}
           onStatus={(s) => updateSupport(activeSupport.id, { status: s })}
           onSaveNotes={(n) => updateSupport(activeSupport.id, { admin_notes: n })}
+        />
+      )}
+
+      {/* Operations delete confirmation (Consultations) */}
+      {pendingDelete && (
+        <ConfirmDialog
+          title={pendingDelete.title}
+          description={pendingDelete.description}
+          details={pendingDelete.details}
+          note={pendingDelete.note}
+          confirmLabel={pendingDelete.confirmLabel}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => { const fn = pendingDelete.onConfirm; setPendingDelete(null); fn?.() }}
+        />
+      )}
+
+      {/* Move-to-Sales duplicate warning */}
+      {pendingMove && (
+        <DuplicateWarning
+          matches={pendingMove.matches}
+          onViewExisting={(p) => { setPendingMove(null); setActiveProspect(p) }}
+          onSaveAnyway={() => doMoveToSales(pendingMove.consultation)}
+          onCancel={() => setPendingMove(null)}
         />
       )}
 
@@ -765,11 +898,11 @@ function Home({ consultations, clients, projects, support, history, prospects = 
 
 /* ---------------------------------------------------------- consultations */
 
-function Consultations({ rows, onOpen, onStatus }) {
+function Consultations({ rows, onOpen, onStatus, onMoveToSales, onDelete }) {
   if (rows.length === 0) return <Empty />
   return (
     <div className="card-surface overflow-x-auto p-2 shadow-card">
-      <table className="w-full min-w-[820px] border-collapse text-sm">
+      <table className="w-full min-w-[960px] border-collapse text-sm">
         <thead>
           <tr className="text-left font-mono text-[11px] uppercase tracking-wider text-gray-500">
             <Th>Name</Th><Th>Business</Th><Th>Date</Th><Th>Time</Th>
@@ -789,9 +922,28 @@ function Consultations({ rows, onOpen, onStatus }) {
                 <StatusSelect value={r.status} onChange={(s) => onStatus(r.id, { status: s })} />
               </Td>
               <Td>
-                <button onClick={() => onOpen(r)} className="btn-ghost px-3 py-1.5 text-xs">
-                  View
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => onOpen(r)} className="btn-ghost px-3 py-1.5 text-xs">
+                    View
+                  </button>
+                  {onMoveToSales && (
+                    <button
+                      onClick={() => onMoveToSales(r)}
+                      className="whitespace-nowrap rounded-full border border-gold-400/30 bg-gold-400/[0.06] px-3 py-1.5 text-xs font-medium text-gold-200 transition-colors hover:border-gold-400/60"
+                    >
+                      Move to Sales
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      onClick={() => onDelete(r)}
+                      aria-label={`Delete consultation for ${r.name || r.business || 'lead'}`}
+                      className="rounded-full border border-rose-400/30 bg-rose-400/[0.06] px-3 py-1.5 text-xs font-medium text-rose-200 transition-colors hover:border-rose-400/60"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               </Td>
             </tr>
           ))}

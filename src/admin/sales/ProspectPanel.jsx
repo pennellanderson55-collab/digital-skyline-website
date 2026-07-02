@@ -321,7 +321,7 @@ export default function ProspectPanel({ prospect, error, onClose, onUpdate, onDe
           <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4" onClick={() => setConfirmDel(false)}>
             <div className="card-surface w-full max-w-sm p-6 text-center shadow-card" onClick={(e) => e.stopPropagation()}>
               <h4 className="font-display text-lg font-semibold text-gray-50">Delete prospect?</h4>
-              <p className="mt-2 text-sm text-gray-400">“{p.business_name}” will be permanently removed. This cannot be undone.</p>
+              <p className="mt-2 text-sm text-gray-400">“{p.business_name}” will be removed from your prospect lists. This is a soft delete — the record is retained in the database and can be restored.</p>
               <div className="mt-5 flex justify-center gap-3">
                 <button onClick={() => setConfirmDel(false)} className="btn-ghost px-5 py-2.5 text-sm">Cancel</button>
                 <button onClick={remove} disabled={busy} className="rounded-full bg-rose-500/90 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-500 disabled:opacity-60">

@@ -124,6 +124,18 @@ export default function Pricing() {
                 ))}
               </ul>
 
+              {/* Optional maintenance — same on every package; clearly an add-on,
+                  never bundled or implied as required. */}
+              <div className="mt-6 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-gold-300/80">
+                  Optional add-on
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-gray-400">
+                  Optional monthly maintenance plans are available after launch to help keep your
+                  website secure, updated, and running smoothly.
+                </p>
+              </div>
+
               <a
                 href="#consultation"
                 className={`mt-8 ${p.featured ? 'btn-gold' : 'btn-ghost'} w-full text-sm`}

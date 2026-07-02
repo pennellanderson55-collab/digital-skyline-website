@@ -177,3 +177,71 @@ export const normalizeUrl = (url) => {
   if (!url) return ''
   return /^https?:\/\//i.test(url) ? url : `https://${url}`
 }
+
+// ── Duplicate detection ─────────────────────────────────────────────────────
+// Case/format-insensitive normalisers used to compare leads.
+const normText = (s) => (s ?? '').toString().trim().toLowerCase()
+const digits = (s) => (s ?? '').toString().replace(/\D+/g, '')
+const normHost = (s) =>
+  normText(s).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '')
+
+// Return existing prospects that look like duplicates of `candidate`, each
+// tagged with which field(s) matched (business name / website / email / phone).
+// Phone requires ≥7 digits to avoid trivial collisions. Pass excludeId to skip
+// the record being edited.
+export function findProspectDuplicates(candidate = {}, prospects = [], { excludeId } = {}) {
+  const bn = normText(candidate.business_name)
+  const em = normText(candidate.email)
+  const ph = digits(candidate.phone)
+  const web = normHost(candidate.website)
+  const out = []
+  for (const p of prospects) {
+    if (excludeId && p.id === excludeId) continue
+    if (p.deleted_at) continue
+    const on = []
+    if (bn && normText(p.business_name) === bn) on.push('business name')
+    if (web && normHost(p.website) === web) on.push('website')
+    if (em && normText(p.email) === em) on.push('email')
+    if (ph && ph.length >= 7 && digits(p.phone) === ph) on.push('phone')
+    if (on.length) out.push({ prospect: p, on })
+  }
+  return out
+}
+
+// ── Operations → Sales bridge ───────────────────────────────────────────────
+// Consultation status → nearest valid prospect status (the original is also
+// preserved verbatim in the prospect's notes).
+const CONSULTATION_STATUS_TO_PROSPECT = {
+  'New': 'New Lead',
+  'Contacted': 'Contacted',
+  'Consultation Scheduled': 'Consultation Scheduled',
+  'Proposal Sent': 'Proposal Sent',
+  'Closed Won': 'Won',
+  'Closed Lost': 'Lost',
+}
+
+// Map a consultation (Operations) into a prospect (Sales) insert patch,
+// preserving Business, Contact, Email, Phone, Notes, Service and Status.
+export function prospectFromConsultation(c = {}, today = '') {
+  const blocks = []
+  if (c.project_type) blocks.push(`Service interest: ${c.project_type}`)
+  if (c.budget) blocks.push(`Budget: ${c.budget}`)
+  const clientNotes = (c.notes || '').trim()
+  const adminNotes = (c.admin_notes || '').trim()
+  if (clientNotes) blocks.push(clientNotes)
+  if (adminNotes) blocks.push(`Internal notes: ${adminNotes}`)
+  blocks.push(
+    `Moved to Sales from a consultation${today ? ` on ${today}` : ''}` +
+      `${c.status ? ` · original status: ${c.status}` : ''}.`,
+  )
+  return {
+    business_name: (c.business || c.name || 'Unknown business').toString().trim() || 'Unknown business',
+    owner_name: c.name || null,
+    email: c.email || null,
+    phone: c.phone || null,
+    source: 'Consultation',
+    source_consultation_id: c.id,
+    status: CONSULTATION_STATUS_TO_PROSPECT[c.status] || 'New Lead',
+    notes: blocks.join('\n\n'),
+  }
+}

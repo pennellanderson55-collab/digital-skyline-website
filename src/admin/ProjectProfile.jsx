@@ -11,7 +11,7 @@ import {
  * (back button) rather than a modal. The Project Reference is shown as the
  * master identifier connecting every section below.
  */
-export default function ProjectProfile({ project, history = [], onClose, onSaveProject, onSaveClient, onStageChange, onRevert }) {
+export default function ProjectProfile({ project, history = [], onClose, onSaveProject, onSaveClient, onStageChange, onRevert, onDelete }) {
   const client = project.client || {}
 
   const [clientForm, setClientForm] = useState(pickClient(client))
@@ -21,6 +21,9 @@ export default function ProjectProfile({ project, history = [], onClose, onSaveP
   const [confirmRevert, setConfirmRevert] = useState(false)
   const [reverting, setReverting] = useState(false)
   const [revertError, setRevertError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   // Re-initialise only when a *different* project is opened — not on every
   // optimistic patch (which would discard unsaved edits mid-session).
@@ -63,6 +66,16 @@ export default function ProjectProfile({ project, history = [], onClose, onSaveP
     }
   }
 
+  const doDelete = async () => {
+    setDeleting(true); setDeleteError('')
+    try {
+      await onDelete()   // on success the parent unmounts this profile
+    } catch (e) {
+      setDeleteError(e.message || 'Delete failed. Please try again.')
+      setDeleting(false)
+    }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -77,6 +90,14 @@ export default function ProjectProfile({ project, history = [], onClose, onSaveP
               className="inline-flex items-center gap-2 rounded-full border border-rose-400/40 bg-rose-400/[0.06] px-5 py-2.5 text-xs font-medium text-rose-200 transition-colors hover:border-rose-400/70 hover:bg-rose-400/10"
             >
               Revert To Lead
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={() => { setDeleteError(''); setConfirmDelete(true) }}
+              className="inline-flex items-center gap-2 rounded-full border border-rose-400/40 bg-rose-400/[0.06] px-5 py-2.5 text-xs font-medium text-rose-200 transition-colors hover:border-rose-400/70 hover:bg-rose-400/10"
+            >
+              Delete
             </button>
           )}
           <button onClick={save} disabled={saving} className="btn-gold text-sm disabled:opacity-60">
@@ -113,6 +134,41 @@ export default function ProjectProfile({ project, history = [], onClose, onSaveP
                 className="inline-flex items-center gap-2 rounded-full border border-rose-400/50 bg-rose-400/15 px-6 py-2.5 text-sm font-semibold text-rose-100 transition-colors hover:bg-rose-400/25 disabled:opacity-60"
               >
                 {reverting ? 'Reverting…' : 'Revert To Lead'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation (soft delete of the project + its client record) */}
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => !deleting && setConfirmDelete(false)}
+        >
+          <div className="card-surface relative w-full max-w-md p-7 shadow-card" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-xl font-bold text-gray-50">Delete this record?</h3>
+            <p className="mt-3 text-sm text-gray-400">
+              The project and client record for{' '}
+              <span className="font-mono text-gold-200">{project.project_reference}</span>
+              {' '}(<span className="text-gray-200">{clientForm.company_name || clientForm.contact_name || 'this client'}</span>)
+              {' '}will be removed from your Projects and Clients lists.
+            </p>
+            <p className="mt-2 text-xs text-gray-500">
+              This is a soft delete — the record is retained in the database and can be restored. It does not
+              affect the original consultation.
+            </p>
+            {deleteError && <p className="mt-3 text-xs text-rose-400">{deleteError}</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => setConfirmDelete(false)} disabled={deleting} className="btn-ghost text-sm disabled:opacity-60">
+                Cancel
+              </button>
+              <button
+                onClick={doDelete}
+                disabled={deleting}
+                className="inline-flex items-center gap-2 rounded-full bg-rose-500/90 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-500 disabled:opacity-60"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
