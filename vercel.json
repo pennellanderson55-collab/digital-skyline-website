@@ -4,9 +4,6 @@
   "buildCommand": "npm run build",
   "devCommand": "./node_modules/.bin/vite --port $PORT",
   "outputDirectory": "dist",
-  "redirects": [
-    { "source": "/consultation", "destination": "/#consultation", "permanent": false }
-  ],
   "rewrites": [
     { "source": "/((?!api/|@vite/|@react-refresh|src/|node_modules/|assets/|.*\\.\\w+$).*)", "destination": "/index.html" }
   ]

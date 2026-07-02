@@ -24,6 +24,7 @@ const Terms = lazy(() => import('./pages/Terms.jsx'))
 const Status = lazy(() => import('./pages/Status.jsx'))
 const ThankYou = lazy(() => import('./pages/ThankYou.jsx'))
 const ConsultationConfirmed = lazy(() => import('./pages/ConsultationConfirmed.jsx'))
+const ConsultationPage = lazy(() => import('./pages/ConsultationPage.jsx'))
 const Book = lazy(() => import('./pages/Book.jsx'))
 const ClientPortal = lazy(() => import('./pages/ClientPortal.jsx'))
 const Support = lazy(() => import('./pages/Support.jsx'))
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="/terms" element={<Terms />} />
           <Route path="/status" element={<Status />} />
           <Route path="/thank-you" element={<ThankYou />} />
+          <Route path="/consultation" element={<ConsultationPage />} />
           <Route path="/consultation-confirmed" element={<ConsultationConfirmed />} />
           <Route path="/book" element={<Book />} />
           <Route path="/client-portal" element={<ClientPortal />} />
