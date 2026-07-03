@@ -262,10 +262,10 @@ const capitalize = (s = '') => s.replace(/\b\w/g, (c) => c.toUpperCase())
  * always responds. `context` is the AI-context summary for the recipient. */
 export async function assistRemote(instruction, { email = { subject: '', body: '' }, ctx = {}, contact = {}, context = {} } = {}) {
   try {
-    const r = await fetch('/api/comms/assistant', {
+    const r = await fetch('/api/comms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instruction, email, contact, context }),
+      body: JSON.stringify({ op: 'assistant', instruction, email, contact, context }),
     })
     if (r.ok) {
       const d = await r.json()

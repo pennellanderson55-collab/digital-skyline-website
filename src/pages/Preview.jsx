@@ -3,7 +3,7 @@
 //
 // A private, premium presentation a client opens instead of a raw storage link.
 // Black + gold, glassmorphism, elegant. Streams its media through the app's
-// proxy (/api/preview-asset) so the Supabase location is never exposed. Ends
+// proxy (/api/preview?a=…) so the Supabase location is never exposed. Ends
 // with an interactive "Ready to Launch?" section that turns the preview into a
 // sales page — the responses drive the CRM pipeline server-side.
 // ============================================================================
@@ -22,8 +22,8 @@ const WHY = [
   ['Lifetime scalability', 'Grows with you — apps, dashboards, automations.'],
 ]
 
-const asset = (token, i) => `/api/preview-asset?token=${encodeURIComponent(token)}&i=${i}`
-const doc = (token, file) => `/api/preview-asset?token=${encodeURIComponent(token)}&file=${file}`
+const asset = (token, i) => `/api/preview?token=${encodeURIComponent(token)}&a=${i}`
+const doc = (token, file) => `/api/preview?token=${encodeURIComponent(token)}&file=${file}`
 
 export default function Preview() {
   const { token } = useParams()
@@ -35,7 +35,7 @@ export default function Preview() {
 
   useEffect(() => {
     let alive = true
-    fetch(`/api/preview-view?token=${encodeURIComponent(token)}`)
+    fetch(`/api/preview?token=${encodeURIComponent(token)}`)
       .then((r) => r.json())
       .then((d) => { if (!alive) return; if (d.ok) { viewIdRef.current = d.viewId; setState({ status: 'ready', data: d }) } else setState({ status: 'invalid' }) })
       .catch(() => alive && setState({ status: 'invalid' }))
@@ -47,7 +47,7 @@ export default function Preview() {
     const flush = () => {
       const id = viewIdRef.current; if (!id) return
       const ms = Date.now() - startRef.current
-      try { navigator.sendBeacon('/api/preview-view', new Blob([JSON.stringify({ token, viewId: id, ms })], { type: 'application/json' })) } catch { /* ignore */ }
+      try { navigator.sendBeacon('/api/preview', new Blob([JSON.stringify({ op: 'beacon', token, viewId: id, ms })], { type: 'application/json' })) } catch { /* ignore */ }
     }
     window.addEventListener('pagehide', flush)
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush() })
@@ -166,7 +166,7 @@ function ReadyToLaunch({ token, initial }) {
   const respond = async (action, msg) => {
     setBusy(true)
     try {
-      const r = await fetch('/api/preview-respond', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, action, note: msg }) })
+      const r = await fetch('/api/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'respond', token, action, note: msg }) })
       const d = await r.json().catch(() => ({}))
       setDone(action)
       if (action === 'consult' && d.bookingUrl) setTimeout(() => { window.location.href = d.bookingUrl }, 1200)

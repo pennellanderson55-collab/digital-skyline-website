@@ -12,10 +12,11 @@ export async function createPreview({ assets, contact = {}, liveSite } = {}) {
   const clean = (assets || []).filter((a) => a?.path && (a.kind === 'image' || a.kind === 'video'))
   if (!clean.length) return { ok: false, error: 'No media to preview.' }
   try {
-    const r = await fetch('/api/preview-create', {
+    const r = await fetch('/api/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        op: 'create',
         assets: clean.map((a) => ({ kind: a.kind, path: a.path, label: a.label })),
         contact, liveSite,
       }),

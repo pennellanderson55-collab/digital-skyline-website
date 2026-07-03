@@ -17,7 +17,7 @@ const json = async (res) => { try { return await res.json() } catch { return {} 
 /** Which capabilities are live (send/receive) and which provider handles each. */
 export async function getProviders() {
   try {
-    const r = await fetch('/api/comms/providers')
+    const r = await fetch('/api/comms?op=providers')
     if (!r.ok) return offlineProviders()
     const d = await json(r)
     return { ...d, offline: false }
@@ -34,7 +34,7 @@ const offlineProviders = () => ({ ok: false, offline: true, providers: [], outbo
  */
 export async function listThreads(folder) {
   try {
-    const r = await fetch(`/api/comms/threads?folder=${encodeURIComponent(folder)}`)
+    const r = await fetch(`/api/comms?op=threads&folder=${encodeURIComponent(folder)}`)
     if (!r.ok) return { ok: false, configured: false, threads: [] }
     const d = await json(r)
     return { ok: !!d.ok, configured: !!d.configured, source: d.source, threads: d.threads || [] }
@@ -50,10 +50,10 @@ export async function listThreads(folder) {
  */
 export async function send(msg) {
   try {
-    const r = await fetch('/api/comms/send', {
+    const r = await fetch('/api/comms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(msg),
+      body: JSON.stringify({ op: 'send', ...msg }),
     })
     const d = await json(r)
     if (!r.ok) return { ok: false, error: d?.error || `Send failed (${r.status})` }
