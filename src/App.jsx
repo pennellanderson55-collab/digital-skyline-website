@@ -29,6 +29,7 @@ const Book = lazy(() => import('./pages/Book.jsx'))
 const ClientPortal = lazy(() => import('./pages/ClientPortal.jsx'))
 const Support = lazy(() => import('./pages/Support.jsx'))
 const Admin = lazy(() => import('./admin/Admin.jsx'))
+const Preview = lazy(() => import('./pages/Preview.jsx'))
 
 function Home() {
   return (
@@ -56,7 +57,7 @@ export default function App() {
   // The internal admin dashboard and the post-conversion pages are standalone
   // experiences — keep the marketing-site chrome (loader intro, easter egg,
   // sound, smooth-scroll) off of them.
-  const bareRoutes = ['/admin', '/thank-you', '/consultation-confirmed', '/book']
+  const bareRoutes = ['/admin', '/thank-you', '/consultation-confirmed', '/book', '/preview']
   const isBare = bareRoutes.some((r) => pathname.startsWith(r))
 
   return (
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="/client-portal" element={<ClientPortal />} />
           <Route path="/support" element={<Support />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/preview/:token" element={<Preview />} />
         </Routes>
       </Suspense>
     </>

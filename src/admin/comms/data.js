@@ -34,6 +34,7 @@ export const FOLDERS = [
   { id: 'sent', label: 'Sent', icon: 'Send' },
   { id: 'drafts', label: 'Drafts', icon: 'Draft' },
   { id: 'scheduled', label: 'Scheduled', icon: 'Clock' },
+  { id: 'previews', label: 'Previews', icon: 'Eye' },
   { id: 'templates', label: 'Templates', icon: 'Template' },
   { id: 'prospects', label: 'Prospects', icon: 'Target' },
   { id: 'clients', label: 'Clients', icon: 'Users' },

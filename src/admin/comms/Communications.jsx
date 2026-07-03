@@ -16,7 +16,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import mail from '../../lib/mail/index.js'
-import { useDashboardStyles, GlassCard } from '../dashboard/primitives.jsx'
+import { useDashboardStyles, GlassCard, SlideOver } from '../dashboard/primitives.jsx'
 import * as I from './icons.jsx'
 import {
   DS, FOLDERS, SEED_THREADS, TEMPLATES, SMART_ASSETS, ASSISTANT_SUGGESTIONS,
@@ -25,7 +25,8 @@ import {
 import { assistRemote, parseCommand } from './assistant.js'
 import { loadContactContext, deriveContext } from './context.js'
 import { uploadToStorage, fileKindOf, iconForKind, humanSize, mustHost } from '../../lib/mail/storage.js'
-import { withMediaButton, withoutMediaButton } from './compose.js'
+import { createPreview } from '../../lib/preview.js'
+import { withPreviewButton, withoutPreviewButton, resolvePreviewUrl, hasPreviewButton } from './compose.js'
 
 /* ── module-scoped styles (typing dots, glows, entrances) ────────────────── */
 const STYLE_ID = 'ds-comms-css'
@@ -173,33 +174,33 @@ export default function Communications({ prospects = [], clients = [], projects 
     flash(`Template “${tpl.name}” loaded into composer`)
   }
 
-  // Attach a pre-hosted project asset (Smart Attachments). A hosted VIDEO drops
-  // the "View Website Preview Video" button into the body; everything else just
-  // becomes a chip (rendered inline / as a button in the sent email).
+  // Media (image/video) becomes a single "View Website Preview" button; the
+  // preview PAGE decides photo vs video. Non-media files stay as normal chips.
+  const isMediaKind = (k) => k === 'image' || k === 'video'
+
+  // Attach a pre-hosted project asset (Smart Attachments).
   const attachAsset = (asset) => {
     setComposing(true)
     setEmail((e) => {
       if (e.attachments.some((a) => a.id === asset.id)) return e
-      const chip = { ...asset, kind: asset.kind || 'doc', hosted: !!asset.url }
-      const body = chip.url ? withMediaButton(e.body, chip) : e.body
+      const chip = { ...asset, kind: asset.kind || 'doc', hosted: !!(asset.url || asset.path) }
+      const body = isMediaKind(chip.kind) && (chip.path || chip.url) ? withPreviewButton(e.body) : e.body
       return { ...e, attachments: [...e.attachments, chip], body }
     })
-    const isMedia = asset.kind === 'video' || asset.kind === 'image'
-    flash(asset.kind === 'video' ? 'Video added as a hosted preview link'
-      : asset.kind === 'image' ? 'Photo added as a hosted preview link'
-      : `Attached ${asset.label}`, isMedia ? 'blue' : 'gold')
+    flash(isMediaKind(asset.kind) ? 'Added to your Website Preview' : `Attached ${asset.label}`, isMediaKind(asset.kind) ? 'blue' : 'gold')
   }
 
-  // Remove an attachment — and if it was hosted media, strip its body button
-  // (and renumber remaining photo buttons).
+  // Remove an attachment — drop the preview button only when the LAST media
+  // attachment is removed (all media share one preview button).
   const removeAttachment = (id) => setEmail((e) => {
-    const gone = e.attachments.find((a) => a.id === id)
-    const body = gone?.url ? withoutMediaButton(e.body, gone) : e.body
-    return { ...e, attachments: e.attachments.filter((a) => a.id !== id), body }
+    const attachments = e.attachments.filter((a) => a.id !== id)
+    const mediaLeft = attachments.some((a) => isMediaKind(a.kind) && (a.path || a.url) && !a.failed)
+    const body = mediaLeft ? e.body : withoutPreviewButton(e.body)
+    return { ...e, attachments, body }
   })
 
-  // Upload files. Videos (and anything oversized) upload to Supabase Storage and
-  // become a hosted link — never a raw attachment. Each chip shows an
+  // Upload files. Media uploads to Supabase Storage and joins the Website
+  // Preview; other files hosted only if oversized. Each chip shows an
   // uploading → hosted/failed lifecycle; a failed upload is surfaced, not silent.
   const onUpload = async (files) => {
     setComposing(true)
@@ -211,21 +212,18 @@ export default function Communications({ prospects = [], clients = [], projects 
         chip: { id: `up-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`, label: f.name, kind, icon: iconForKind(kind), size: humanSize(f.size), hosted: host, uploading: host },
       }
     })
-    // Show every chip immediately (hosted ones as "uploading…").
     setEmail((e) => ({ ...e, attachments: [...e.attachments, ...items.map((it) => it.chip)] }))
 
     for (const { file, chip } of items) {
-      if (!chip.uploading) continue // small non-video: kept as a local chip (inline attach handled server-side later)
+      if (!chip.uploading) continue // small non-media: local chip (attached as bytes at send)
       const res = await uploadToStorage(file, { prefix: contact?.business ? slugify(contact.business) : 'uploads' })
       setEmail((e) => {
         const attachments = e.attachments.map((a) => a.id !== chip.id ? a
-          : res.ok ? { ...a, uploading: false, hosted: true, url: res.url } : { ...a, uploading: false, failed: true, error: res.error })
-        const body = res.ok ? withMediaButton(e.body, { ...chip, url: res.url }) : e.body
+          : res.ok ? { ...a, uploading: false, hosted: true, url: res.url, path: res.path } : { ...a, uploading: false, failed: true, error: res.error })
+        const body = res.ok && isMediaKind(chip.kind) ? withPreviewButton(e.body) : e.body
         return { ...e, attachments, body }
       })
-      if (res.ok) flash(chip.kind === 'video' ? 'Video uploaded → preview button added'
-        : chip.kind === 'image' ? 'Photo uploaded → preview button added'
-        : `Uploaded ${chip.label}`, 'gold')
+      if (res.ok) flash(isMediaKind(chip.kind) ? 'Added to your Website Preview' : `Uploaded ${chip.label}`, 'gold')
       else flash(`Upload failed: ${res.error}`, 'blue')
     }
     const small = items.filter((it) => !it.chip.uploading)
@@ -255,10 +253,32 @@ export default function Communications({ prospects = [], clients = [], projects 
   const crmFor = (c) => c ? { prospect_id: c.prospectId || null, client_id: c.clientId || null, contact_email: c.email || email.to || null } : { contact_email: email.to || null }
   // Final body = the clean message, plus quoted thread history only if opted in.
   const composedBody = (e) => (e.includeHistory && e.quoted ? `${e.body.replace(/\s+$/, '')}\n\n${e.quoted}` : e.body)
-  // Only hosted (url) or byte (content) attachments are sendable — skip chips
-  // still uploading or that failed.
-  const sendableAttachments = (e) => e.attachments.filter((a) => (a.url || a.content) && !a.uploading && !a.failed)
+  // Media (image/video) ships via the branded preview button, NOT as an email
+  // attachment — so only non-media hosted/byte files are attached.
+  const sendableAttachments = (e) => e.attachments
+    .filter((a) => (a.url || a.content) && !a.uploading && !a.failed && !isMediaKind(a.kind))
     .map((a) => ({ id: a.id, label: a.label, kind: a.kind, size: a.size, url: a.url, content: a.content }))
+  const mediaAssetsOf = (e) => e.attachments
+    .filter((a) => isMediaKind(a.kind) && !a.uploading && !a.failed)
+    .map((a) => ({ kind: a.kind, path: a.path || storagePathFromUrl(a.url), label: a.label }))
+    .filter((a) => a.path)
+
+  // Turn media into a secure preview record and swap its branded URL into the
+  // body. Returns { ok, body } or an error — media MUST resolve before sending.
+  const preparePreview = async (e) => {
+    const base = composedBody(e)
+    if (!hasPreviewButton(base)) return { ok: true, body: base }
+    const assets = mediaAssetsOf(e)
+    if (!assets.length) return { ok: true, body: withoutPreviewButton(base) }
+    const liveSite = contact?.website ? (/^https?:/i.test(contact.website) ? contact.website : `https://${contact.website}`) : undefined
+    const res = await createPreview({
+      assets, liveSite,
+      contact: { prospect_id: contact?.prospectId || null, client_id: contact?.clientId || null, email: contact?.email || e.to || null, business: contact?.business || null, owner: contact?.name || null },
+    })
+    if (!res.ok) return { ok: false, error: res.error, offline: res.offline }
+    return { ok: true, body: resolvePreviewUrl(base, res.url), previewUrl: res.url }
+  }
+
   const doSend = async () => {
     if (sending) return
     const action = email.scheduledFor ? 'schedule' : 'send'
@@ -266,8 +286,10 @@ export default function Communications({ prospects = [], clients = [], projects 
     if (!email.subject.trim()) { flash('Add a subject first', 'blue'); return }
     if (email.attachments.some((a) => a.uploading)) { flash('An attachment is still uploading…', 'blue'); return }
     setSending(true)
+    const prep = await preparePreview(email)
+    if (!prep.ok) { setSending(false); flash(prep.offline ? 'No backend reachable — deploy to Vercel to send previews' : `Preview failed: ${prep.error}`, 'blue'); return }
     const res = await mail.send({
-      action, to: email.to, cc: email.cc, bcc: email.bcc, subject: email.subject, body: composedBody(email),
+      action, to: email.to, cc: email.cc, bcc: email.bcc, subject: email.subject, body: prep.body,
       attachments: sendableAttachments(email), scheduledFor: scheduleISO(email.scheduledFor), crm: crmFor(contact),
     })
     setSending(false)
@@ -275,7 +297,7 @@ export default function Communications({ prospects = [], clients = [], projects 
       if (res.folder === 'scheduled') flash(`Scheduled · ${email.scheduledFor}`, 'blue')
       else flash(res.sandbox ? 'Sent (sandbox → test inbox)' : `Sent to ${res.to || email.to}`)
       setComposing(false); setEmail(blankEmail()); setContact(contact)
-      setLiveThreads((m) => ({ ...m, sent: undefined, scheduled: undefined }))
+      setLiveThreads((m) => ({ ...m, sent: undefined, scheduled: undefined, previews: undefined }))
     } else if (res.offline) {
       flash('No mail backend reachable — deploy to Vercel or run `vercel dev`', 'blue')
     } else {
@@ -283,7 +305,9 @@ export default function Communications({ prospects = [], clients = [], projects 
     }
   }
   const saveDraft = async () => {
-    const res = await mail.send({ action: 'draft', to: email.to, subject: email.subject, body: composedBody(email), attachments: sendableAttachments(email), crm: crmFor(contact) })
+    const prep = await preparePreview(email)
+    const body = prep.ok ? prep.body : withoutPreviewButton(composedBody(email))
+    const res = await mail.send({ action: 'draft', to: email.to, subject: email.subject, body, attachments: sendableAttachments(email), crm: crmFor(contact) })
     flash(res.ok ? 'Saved to Drafts' : 'Draft saved locally', 'gold')
     setLiveThreads((m) => ({ ...m, drafts: undefined }))
   }
@@ -372,6 +396,8 @@ export default function Communications({ prospects = [], clients = [], projects 
               />
             ) : openThread ? (
               <Reader thread={openThread} onReply={() => replyTo(openThread)} onBack={() => setOpenThread(null)} />
+            ) : folder === 'previews' ? (
+              <PreviewsPanel onCompose={() => startCompose()} />
             ) : folder === 'templates' ? (
               <TemplatesGallery onUse={applyTemplate} />
             ) : folder === 'prospects' || folder === 'clients' ? (
@@ -430,6 +456,12 @@ function scheduleISO(label) {
 const contactCtx = (c) => c ? { name: (c.name || '').split(' ')[0], business: c.business, rating: c.rating, notes: c.notes } : {}
 const quote = (b = '') => b.split('\n').map((l) => `> ${l}`).join('\n')
 const slugify = (s = '') => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'uploads'
+// Extract the storage object key from a Supabase public/signed URL (so a smart
+// asset that only carries a url can still be turned into a preview asset).
+const storagePathFromUrl = (url = '') => {
+  const m = String(url).match(/\/object\/(?:public|sign)\/comms-media\/([^?]+)/)
+  return m ? decodeURIComponent(m[1]) : null
+}
 
 // Hosted media (video/photo) is inserted into the email body as a markdown link
 // that resend.js renders as a gold CTA button + fallback link. See ./compose.js.
@@ -767,25 +799,25 @@ function Field({ label, value, onChange, placeholder, bold, right, list }) {
 function AttachChip({ a, onRemove }) {
   const failed = a.failed
   const uploading = a.uploading
-  const isMedia = (a.kind === 'video' || a.kind === 'image') && a.url
-  const border = failed ? 'border-rose-400/40' : isMedia ? 'border-blue-400/30' : 'border-white/10'
-  const hostedLabel = a.kind === 'video' ? 'hosted video link' : 'hosted photo link'
+  const isMedia = (a.kind === 'video' || a.kind === 'image')
+  const hosted = isMedia && (a.url || a.path)
+  const border = failed ? 'border-rose-400/40' : hosted ? 'border-gold-400/30' : 'border-white/10'
   return (
     <div className={`ds-pop group flex items-center gap-2.5 rounded-xl border ${border} bg-white/[0.03] py-2 pl-2.5 pr-2`}>
-      {/* Icon only — never an inline image preview (photos are hosted links). */}
       <span className={`relative flex h-9 w-9 items-center justify-center rounded-lg border ${failed ? 'border-rose-400/30 text-rose-300' : 'border-gold-400/25 bg-gold-400/[0.06] text-gold-300'}`}>
-        <Ic name={a.icon} className="h-4 w-4" />
-        {a.kind === 'video' && a.url && <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/30 text-white"><I.Play className="h-3.5 w-3.5" /></span>}
+        <Ic name={isMedia ? 'Eye' : a.icon} className="h-4 w-4" />
+        {a.kind === 'video' && hosted && <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/30 text-white"><I.Play className="h-3.5 w-3.5" /></span>}
       </span>
       <div className="min-w-0">
-        <div className="max-w-[170px] truncate text-xs font-medium text-gray-200">{a.label}</div>
+        {/* Media reads as one "Website Preview"; the filename is secondary. */}
+        <div className="max-w-[180px] truncate text-xs font-medium text-gray-200">{isMedia ? 'Website Preview' : a.label}</div>
         <div className="flex items-center gap-1.5 font-mono text-[10px]">
           {uploading ? (
             <span className="inline-flex items-center gap-1 text-blue-300"><span className="ds-typing"><span /><span /><span /></span> uploading…</span>
           ) : failed ? (
             <span className="text-rose-300" title={a.error}>upload failed — remove &amp; retry</span>
           ) : isMedia ? (
-            <a href={a.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 rounded bg-blue-400/10 px-1 text-blue-300 hover:text-blue-200"><I.LinkIcon className="h-2.5 w-2.5" /> {hostedLabel}</a>
+            <span className="inline-flex items-center gap-1 truncate text-gold-200/80"><I.Sparkle className="h-2.5 w-2.5" /> {a.kind === 'video' ? 'video' : 'photo'} · secure preview</span>
           ) : a.url ? (
             <span className="text-gray-500">{a.size} · <a href={a.url} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-gold-200">preview</a></span>
           ) : (
@@ -1201,6 +1233,121 @@ function ContextDrawer({ contact, ctx, open, onToggle }) {
   )
 }
 const trunc = (s = '', n = 30) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
+
+/* ═══════════════════════════════════════════════════ PREVIEWS PANEL ══════ */
+// Every sent preview with live tracking: viewed?, view count, sent + last-viewed
+// dates, response, and an open timeline (device/browser/country/duration).
+function PreviewsPanel({ onCompose }) {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+  const [open, setOpen] = useState(null)      // active preview row for the timeline
+  const [copied, setCopied] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    if (!supabase) { setRows([]); return }
+    supabase.from('preview_links').select('*').order('created_at', { ascending: false }).limit(200)
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) setError(/relation .* does not exist/i.test(error.message) ? 'Previews table not found — run supabase/previews.sql in Supabase.' : error.message)
+        setRows(data || [])
+      })
+    return () => { alive = false }
+  }, [])
+
+  const previewUrl = (t) => `${location.origin}/preview/${t}`
+  const copy = async (t) => { try { await navigator.clipboard.writeText(previewUrl(t)); setCopied(t); setTimeout(() => setCopied((c) => c === t ? '' : c), 1500) } catch { /* ignore */ } }
+
+  if (rows === null) return <GlassCard className="px-6 py-12 text-center text-sm text-gray-500">Loading previews…</GlassCard>
+  if (error) return <GlassCard className="px-6 py-10 text-center text-sm text-amber-300">{error}</GlassCard>
+  if (!rows.length) return (
+    <GlassCard className="flex flex-col items-center px-6 py-16 text-center">
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-gold-400/25 bg-gold-400/[0.06] text-gold-300"><I.Eye className="h-7 w-7" /></span>
+      <h3 className="mt-4 font-display text-lg font-semibold text-gray-100">No previews sent yet</h3>
+      <p className="mt-1 max-w-sm text-sm text-gray-500">Attach a photo or video in the composer and send — each one becomes a tracked, branded preview page.</p>
+      <button onClick={onCompose} className="btn-gold mt-5 px-5 py-2.5 text-sm"><I.Plus className="h-4 w-4" /> New preview email</button>
+    </GlassCard>
+  )
+
+  const RESP = { loved: ['🚀 Loved it', 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200'], changes: ['✏️ Wants changes', 'border-amber-400/40 bg-amber-400/10 text-amber-200'], consult: ['📅 Wants a call', 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200'] }
+  return (
+    <>
+      <GlassCard className="divide-y divide-white/[0.05] p-0">
+        {rows.map((r) => {
+          const viewed = (r.view_count || 0) > 0
+          const resp = r.response && RESP[r.response]
+          return (
+            <div key={r.id} className="ds-row flex flex-wrap items-center gap-3 px-4 py-3.5">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-display text-xs font-bold text-ink-950`} style={{ background: `linear-gradient(135deg, hsl(${avatarHue(r.business_name || r.token)} 60% 70%), #d4af37)` }}>{initialsOf(r.business_name || 'DS')}</span>
+              <button onClick={() => setOpen(r)} className="min-w-0 flex-1 text-left">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium text-gray-100">{r.business_name || r.contact_email || 'Preview'}</span>
+                  {resp && <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${resp[1]}`}>{resp[0]}</span>}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-gray-500">
+                  <span className={viewed ? 'text-emerald-300' : 'text-gray-500'}>{viewed ? `● Viewed ${r.view_count}×` : '○ Not viewed'}</span>
+                  <span>sent {relTime(r.created_at)}</span>
+                  {r.last_viewed_at && <span>last {relTime(r.last_viewed_at)}</span>}
+                  <span className="truncate text-gray-600">/preview/{String(r.token).slice(0, 8)}…</span>
+                </div>
+              </button>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button onClick={() => copy(r.token)} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-gray-400 transition-colors hover:border-gold-400/40 hover:text-gold-100">{copied === r.token ? 'Copied' : 'Copy URL'}</button>
+                <a href={previewUrl(r.token)} target="_blank" rel="noreferrer" className="rounded-lg border border-gold-400/30 bg-gold-400/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-gold-200 hover:border-gold-400/60">Open</a>
+              </div>
+            </div>
+          )
+        })}
+      </GlassCard>
+      {open && <PreviewTimeline row={open} onClose={() => setOpen(null)} />}
+    </>
+  )
+}
+
+function PreviewTimeline({ row, onClose }) {
+  const [views, setViews] = useState(null)
+  useEffect(() => {
+    let alive = true
+    if (!supabase) { setViews([]); return }
+    supabase.from('preview_views').select('*').eq('preview_id', row.id).order('viewed_at', { ascending: false }).limit(200)
+      .then(({ data }) => { if (alive) setViews(data || []) })
+    return () => { alive = false }
+  }, [row.id])
+  const dur = (ms) => ms == null ? '—' : ms < 1000 ? '<1s' : ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`
+  const stat = (label, value) => (<div><div className="font-mono text-[10px] uppercase tracking-wider text-gray-500">{label}</div><div className="mt-0.5 text-sm text-gray-100">{value}</div></div>)
+  return (
+    <SlideOver title={row.business_name || 'Preview'} subtitle={`/preview/${String(row.token).slice(0, 12)}…`} icon={<I.Eye className="h-4 w-4" />} onClose={onClose} width="max-w-xl">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {stat('Views', row.view_count || 0)}
+        {stat('First viewed', row.first_viewed_at ? relTime(row.first_viewed_at) : '—')}
+        {stat('Last viewed', row.last_viewed_at ? relTime(row.last_viewed_at) : '—')}
+        {stat('Response', row.response ? row.response : '—')}
+      </div>
+      <div className="mt-4 flex items-center gap-2">
+        <a href={`${location.origin}/preview/${row.token}`} target="_blank" rel="noreferrer" className="btn-gold px-4 py-2 text-xs">Open preview <I.Send className="h-3.5 w-3.5" /></a>
+        {row.response_note && <span className="text-xs text-gray-400">📝 {row.response_note}</span>}
+      </div>
+
+      <h4 className="mt-6 mb-2 font-mono text-[11px] uppercase tracking-wider text-gray-500">Open timeline</h4>
+      {views === null ? <p className="text-sm text-gray-500">Loading…</p>
+        : !views.length ? <p className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-gray-500">No opens yet — you’ll see each visit here (device, browser, country, time on page).</p>
+        : (
+          <div className="space-y-2">
+            {views.map((v) => (
+              <div key={v.id} className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gold-400/20 bg-gold-400/[0.06] text-gold-300 text-xs">{v.country || '🌐'}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs text-gray-200">{[v.device, v.browser, v.os].filter(Boolean).join(' · ') || 'Unknown device'}</div>
+                  <div className="font-mono text-[10px] text-gray-500">{new Date(v.viewed_at).toLocaleString()}{v.city ? ` · ${v.city}` : ''}</div>
+                </div>
+                <span className="shrink-0 font-mono text-[11px] text-gold-200/80">{dur(v.duration_ms)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+    </SlideOver>
+  )
+}
 
 /* ═══════════════════════════════════════════════════ FUTURE STRIP ════════ */
 function FutureStrip() {

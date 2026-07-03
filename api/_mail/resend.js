@@ -28,14 +28,12 @@ const CHIP = 'display:inline-block;margin:4px 8px 4px 0;padding:8px 14px;border:
 // Render a single line of body text to HTML: markdown links → styled buttons,
 // bare URLs → anchors, everything escaped.
 function renderInline(line) {
-  // [label](url) → a gold CTA button PLUS a plain-text fallback link underneath
-  // (used for "View Website Preview Video" / "…Photo N"). The fallback keeps the
-  // link openable even if a client strips the styled button.
+  // [label](url) → a gold CTA button. The button is the ONLY clickable element —
+  // no raw URL is printed underneath (the href lives on the button itself), so
+  // the branded preview link is all the client ever sees.
   let out = esc(line).replace(
     /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-    (_m, label, url) =>
-      `<a href="${url}" style="${BTN}">${label}</a>` +
-      `<br><a href="${url}" style="font-size:12px;color:#a87f22;text-decoration:underline;word-break:break-all">${url}</a>`,
+    (_m, label, url) => `<a href="${url}" style="${BTN}">${label}</a>`,
   )
   // Bare URLs that aren't already inside an href.
   out = out.replace(/(^|[^"=>])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" style="color:#a87f22;text-decoration:underline">$2</a>')
