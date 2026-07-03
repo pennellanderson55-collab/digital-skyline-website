@@ -28,10 +28,14 @@ const CHIP = 'display:inline-block;margin:4px 8px 4px 0;padding:8px 14px;border:
 // Render a single line of body text to HTML: markdown links → styled buttons,
 // bare URLs → anchors, everything escaped.
 function renderInline(line) {
-  // [label](url) → a button-styled link (used for "View Website Preview Video").
+  // [label](url) → a gold CTA button PLUS a plain-text fallback link underneath
+  // (used for "View Website Preview Video" / "…Photo N"). The fallback keeps the
+  // link openable even if a client strips the styled button.
   let out = esc(line).replace(
     /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-    (_m, label, url) => `<a href="${url}" style="${BTN}">${label}</a>`,
+    (_m, label, url) =>
+      `<a href="${url}" style="${BTN}">${label}</a>` +
+      `<br><a href="${url}" style="font-size:12px;color:#a87f22;text-decoration:underline;word-break:break-all">${url}</a>`,
   )
   // Bare URLs that aren't already inside an href.
   out = out.replace(/(^|[^"=>])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" style="color:#a87f22;text-decoration:underline">$2</a>')
@@ -67,15 +71,14 @@ const renderLine = (l) => /wrote:\s*$/.test(l)
 function toHtml({ body, attachments = [] }) {
   const blocks = String(body || '').split(/\n{2,}/).map(renderBlock).join('')
 
-  // Hosted attachments. Images embed inline; other hosted files become buttons.
-  // Videos are represented by the in-body button, so skip them here to avoid a
-  // duplicate button (the composer inserts a "View Website Preview Video" link).
-  const hosted = attachments.filter((a) => a.url && a.kind !== 'video')
-  const images = hosted.filter((a) => a.kind === 'image')
-    .map((a) => `<a href="${esc(a.url)}"><img src="${esc(a.url)}" alt="${esc(a.label || 'image')}" style="max-width:100%;border-radius:10px;margin:6px 0;border:1px solid #ece7da" /></a>`).join('')
-  const fileLinks = hosted.filter((a) => a.kind !== 'image')
+  // Footer attachments = hosted FILES only (pdf/doc/contract). Videos and images
+  // are represented by their in-body CTA buttons (the composer inserts a
+  // "View Website Preview Video" / "…Photo N" link), so they're skipped here to
+  // avoid duplicates — and images are NEVER embedded inline (they render as a
+  // broken image/❓ in Gmail).
+  const attachHtml = attachments
+    .filter((a) => a.url && a.kind !== 'video' && a.kind !== 'image')
     .map((a) => `<a href="${esc(a.url)}" style="${CHIP}">📎 ${esc(a.label || 'Attachment')}</a>`).join('')
-  const attachHtml = images + fileLinks
 
   return `<!doctype html><html><body style="margin:0;background:#f7f5ef;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a">
   <div style="max-width:600px;margin:0 auto;padding:32px 20px">

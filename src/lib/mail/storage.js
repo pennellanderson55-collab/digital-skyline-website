@@ -30,8 +30,10 @@ export const iconForKind = (kind) => ({ image: 'FileImage', video: 'FileVideo', 
 export const humanSize = (bytes = 0) =>
   bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
 
-// A hosted asset should link out (video always; anything over the inline limit).
-export const mustHost = (file) => isVideo(file) || (file?.size || 0) > INLINE_ATTACH_LIMIT
+// A hosted asset links out instead of embedding. Videos AND images are always
+// hosted (inline images render as a broken image/❓ in Gmail); other files are
+// hosted only when they exceed the inline byte limit.
+export const mustHost = (file) => isVideo(file) || isImage(file) || (file?.size || 0) > INLINE_ATTACH_LIMIT
 
 const slug = (name = 'file') => name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/-+/g, '-').slice(-60)
 
