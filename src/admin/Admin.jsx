@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { Check, Arrow, Sparkle, Activity, Chart, User, Shield, Cube, Bolt, Scan, Cog, Menu, Close } from '../components/Icons.jsx'
+import { Inbox as CommsIcon } from './comms/icons.jsx'
 import Clients from './Clients.jsx'
 import Projects from './Projects.jsx'
 import Support, { SupportModal } from './Support.jsx'
@@ -19,11 +20,13 @@ import SendingQueue from './sales/SendingQueue.jsx'
 import ProspectPanel from './sales/ProspectPanel.jsx'
 import PerformanceDashboard from './dashboard/Dashboard.jsx'
 import SettingsHub from './settings/SettingsHub.jsx'
+import Communications from './comms/Communications.jsx'
 
 // Admin navigation — grouped sidebar. Operations = the existing modules;
 // Sales = the new Outreach CRM (expandable). Keys are unique across groups.
 const OPS_NAV = [
   { key: 'Home', label: 'Home', icon: Activity },
+  { key: 'Communications', label: 'Communications', icon: CommsIcon },
   { key: 'Consultations', label: 'Consultations', icon: User },
   { key: 'Pipeline', label: 'Pipeline', icon: Chart },
   { key: 'Clients', label: 'Clients', icon: Shield },
@@ -683,6 +686,12 @@ function Dashboard({ session }) {
                   onNavigate={openNav}
                   onRefresh={() => { load(); loadProspects(); loadOutreachCounts() }}
                   onOpenProject={setActiveProject}
+                />
+              )}
+              {nav === 'Communications' && (
+                <Communications
+                  prospects={prospects} clients={clients} projects={projects}
+                  userEmail={session.user.email}
                 />
               )}
               {nav === 'Consultations' && (

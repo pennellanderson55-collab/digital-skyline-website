@@ -20,3 +20,10 @@ dist-ssr
 *.sln
 public/KnightSoul.mov
 public/KnightSoul.mov
+
+# Runtime visual-verification output (regenerate via scripts/screenshot-admin.mjs)
+verification-screenshots
+test-results
+playwright-report
+.vercel
+.env*

@@ -1,0 +1,19 @@
+<!doctype html>
+<!--
+  DEV-ONLY visual verification harness for the Sales / OS admin UI.
+  Served by `vite dev` at /verify.html. NOT part of the production build
+  (`vite build` only emits index.html), so it never ships to prod.
+  Renders the REAL Sales components with seeded mock data so the UI can be
+  screenshotted without live Supabase auth.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OS Admin — Visual Verification</title>
+  </head>
+  <body>
+    <div id="verify-root"></div>
+    <script type="module" src="/src/verify.jsx"></script>
+  </body>
+</html>
