@@ -24,6 +24,7 @@ import {
 } from './data.js'
 import { assistRemote, parseCommand } from './assistant.js'
 import { loadContactContext, deriveContext } from './context.js'
+import { uploadToStorage, fileKindOf, iconForKind, humanSize, mustHost } from '../../lib/mail/storage.js'
 
 /* ── module-scoped styles (typing dots, glows, entrances) ────────────────── */
 const STYLE_ID = 'ds-comms-css'
@@ -171,24 +172,58 @@ export default function Communications({ prospects = [], clients = [], projects 
     flash(`Template “${tpl.name}” loaded into composer`)
   }
 
+  // Attach a pre-hosted project asset (Smart Attachments). A hosted VIDEO drops
+  // the "View Website Preview Video" button into the body; everything else just
+  // becomes a chip (rendered inline / as a button in the sent email).
   const attachAsset = (asset) => {
     setComposing(true)
-    setEmail((e) => e.attachments.some((a) => a.id === asset.id) ? e
-      : { ...e, attachments: [...e.attachments, { ...asset, secure: asset.big }] })
-    if (asset.big) flash('Video exceeds email limits → uploaded to secure Supabase link', 'blue')
-    else flash(`Attached ${asset.label}`)
+    setEmail((e) => {
+      if (e.attachments.some((a) => a.id === asset.id)) return e
+      const chip = { ...asset, kind: asset.kind || 'doc', hosted: !!asset.url }
+      let body = e.body
+      if (chip.kind === 'video' && chip.url) body = withVideoButton(body, chip.url)
+      return { ...e, attachments: [...e.attachments, chip], body }
+    })
+    flash(asset.kind === 'video' ? 'Video added as a hosted preview link' : `Attached ${asset.label}`, asset.kind === 'video' ? 'blue' : 'gold')
   }
-  const removeAttachment = (id) => setEmail((e) => ({ ...e, attachments: e.attachments.filter((a) => a.id !== id) }))
 
-  const onUpload = (files) => {
-    const mapped = Array.from(files).map((f, i) => ({
-      id: `up-${Date.now()}-${i}`, label: f.name, kind: fileKind(f), icon: fileIcon(f),
-      size: `${(f.size / 1024 / 1024).toFixed(f.size > 1e6 ? 1 : 2)} MB`, secure: f.size > 20e6,
-    }))
+  // Remove an attachment — and if it was a hosted video, strip its body button.
+  const removeAttachment = (id) => setEmail((e) => {
+    const gone = e.attachments.find((a) => a.id === id)
+    const body = gone?.kind === 'video' && gone.url ? withoutVideoButton(e.body, gone.url) : e.body
+    return { ...e, attachments: e.attachments.filter((a) => a.id !== id), body }
+  })
+
+  // Upload files. Videos (and anything oversized) upload to Supabase Storage and
+  // become a hosted link — never a raw attachment. Each chip shows an
+  // uploading → hosted/failed lifecycle; a failed upload is surfaced, not silent.
+  const onUpload = async (files) => {
     setComposing(true)
-    setEmail((e) => ({ ...e, attachments: [...e.attachments, ...mapped] }))
-    const big = mapped.find((m) => m.secure)
-    flash(big ? `${big.label} is large → secure link created` : `Attached ${mapped.length} file${mapped.length > 1 ? 's' : ''}`, big ? 'blue' : 'gold')
+    const items = Array.from(files).map((f, i) => {
+      const kind = fileKindOf(f)
+      const host = mustHost(f)
+      return {
+        file: f,
+        chip: { id: `up-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`, label: f.name, kind, icon: iconForKind(kind), size: humanSize(f.size), hosted: host, uploading: host },
+      }
+    })
+    // Show every chip immediately (hosted ones as "uploading…").
+    setEmail((e) => ({ ...e, attachments: [...e.attachments, ...items.map((it) => it.chip)] }))
+
+    for (const { file, chip } of items) {
+      if (!chip.uploading) continue // small non-video: kept as a local chip (inline attach handled server-side later)
+      const res = await uploadToStorage(file, { prefix: contact?.business ? slugify(contact.business) : 'uploads' })
+      setEmail((e) => {
+        const attachments = e.attachments.map((a) => a.id !== chip.id ? a
+          : res.ok ? { ...a, uploading: false, hosted: true, url: res.url } : { ...a, uploading: false, failed: true, error: res.error })
+        const body = res.ok && chip.kind === 'video' ? withVideoButton(e.body, res.url) : e.body
+        return { ...e, attachments, body }
+      })
+      if (res.ok) flash(chip.kind === 'video' ? 'Video uploaded → preview link added to the email' : `Uploaded ${chip.label}`, 'gold')
+      else flash(`Upload failed: ${res.error}`, 'blue')
+    }
+    const small = items.filter((it) => !it.chip.uploading)
+    if (small.length) flash(`Attached ${small.length} file${small.length > 1 ? 's' : ''}`, 'gold')
   }
 
   /* ── assistant (live LLM, offline fallback) ────────────────────────────── */
@@ -212,15 +247,22 @@ export default function Communications({ prospects = [], clients = [], projects 
 
   /* ── send / schedule / draft via the provider-agnostic mail service ─────── */
   const crmFor = (c) => c ? { prospect_id: c.prospectId || null, client_id: c.clientId || null, contact_email: c.email || email.to || null } : { contact_email: email.to || null }
+  // Final body = the clean message, plus quoted thread history only if opted in.
+  const composedBody = (e) => (e.includeHistory && e.quoted ? `${e.body.replace(/\s+$/, '')}\n\n${e.quoted}` : e.body)
+  // Only hosted (url) or byte (content) attachments are sendable — skip chips
+  // still uploading or that failed.
+  const sendableAttachments = (e) => e.attachments.filter((a) => (a.url || a.content) && !a.uploading && !a.failed)
+    .map((a) => ({ id: a.id, label: a.label, kind: a.kind, size: a.size, url: a.url, content: a.content }))
   const doSend = async () => {
     if (sending) return
     const action = email.scheduledFor ? 'schedule' : 'send'
     if (!email.to.trim()) { flash('Add a recipient first', 'blue'); return }
     if (!email.subject.trim()) { flash('Add a subject first', 'blue'); return }
+    if (email.attachments.some((a) => a.uploading)) { flash('An attachment is still uploading…', 'blue'); return }
     setSending(true)
     const res = await mail.send({
-      action, to: email.to, cc: email.cc, bcc: email.bcc, subject: email.subject, body: email.body,
-      attachments: email.attachments, scheduledFor: scheduleISO(email.scheduledFor), crm: crmFor(contact),
+      action, to: email.to, cc: email.cc, bcc: email.bcc, subject: email.subject, body: composedBody(email),
+      attachments: sendableAttachments(email), scheduledFor: scheduleISO(email.scheduledFor), crm: crmFor(contact),
     })
     setSending(false)
     if (res.ok) {
@@ -235,7 +277,7 @@ export default function Communications({ prospects = [], clients = [], projects 
     }
   }
   const saveDraft = async () => {
-    const res = await mail.send({ action: 'draft', to: email.to, subject: email.subject, body: email.body, attachments: email.attachments, crm: crmFor(contact) })
+    const res = await mail.send({ action: 'draft', to: email.to, subject: email.subject, body: composedBody(email), attachments: sendableAttachments(email), crm: crmFor(contact) })
     flash(res.ok ? 'Saved to Drafts' : 'Draft saved locally', 'gold')
     setLiveThreads((m) => ({ ...m, drafts: undefined }))
   }
@@ -277,11 +319,19 @@ export default function Communications({ prospects = [], clients = [], projects 
   }
 
   const readThread = (t) => { setOpenThread(t); setComposing(false) }
+  // Reply starts CLEAN — a greeting, no quoted wall of text. The original thread
+  // is kept aside and only appended if the sender flips "Include original message".
   const replyTo = (t) => {
     const c = fuzzyContact(contacts, t.business) || { business: t.business, name: t.from, email: t.email }
     setContact(c)
-    startCompose(c, { to: t.email, subject: t.subject.startsWith('Re:') ? t.subject : `Re: ${t.subject}`,
-      body: `\n\n\n———\nOn ${new Date(t.at).toLocaleString()}, ${t.from} wrote:\n${quote(t.body)}` })
+    const first = (c.name || t.from || '').split(' ')[0]
+    startCompose(c, {
+      to: t.email,
+      subject: t.subject.startsWith('Re:') ? t.subject : `Re: ${t.subject}`,
+      body: first ? `Hi ${first},\n\n` : '',
+      quoted: `On ${new Date(t.at).toLocaleString()}, ${t.from} wrote:\n${quote(t.body)}`,
+      includeHistory: false,
+    })
     flash(`Replying to ${t.from}`)
   }
 
@@ -353,7 +403,7 @@ export default function Communications({ prospects = [], clients = [], projects 
 }
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
-const blankEmail = () => ({ to: '', cc: '', bcc: '', subject: '', body: '', attachments: [], scheduledFor: null })
+const blankEmail = () => ({ to: '', cc: '', bcc: '', subject: '', body: '', attachments: [], scheduledFor: null, quoted: '', includeHistory: false })
 // Best-effort: turn a loose schedule label ("Next Tuesday · 9:00 AM", "Tomorrow")
 // into an ISO timestamp for the backend. Falls back to +3 days at 9am.
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
@@ -373,8 +423,23 @@ function scheduleISO(label) {
 }
 const contactCtx = (c) => c ? { name: (c.name || '').split(' ')[0], business: c.business, rating: c.rating, notes: c.notes } : {}
 const quote = (b = '') => b.split('\n').map((l) => `> ${l}`).join('\n')
-const fileKind = (f) => f.type.startsWith('image') ? 'image' : f.type.startsWith('video') ? 'video' : f.type.includes('pdf') ? 'pdf' : 'doc'
-const fileIcon = (f) => ({ image: 'FileImage', video: 'FileVideo', pdf: 'FilePdf', doc: 'FileDoc' })[fileKind(f)]
+const slugify = (s = '') => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'uploads'
+
+// The clean, hosted "View Website Preview Video" button is inserted into the
+// email body as a markdown link — resend.js renders it as a real button, and it
+// stays clickable as a plain URL in text-only clients. One per URL, idempotent.
+const VIDEO_BTN_LABEL = '▶ View Website Preview Video'
+const videoButtonMd = (url) => `[${VIDEO_BTN_LABEL}](${url})`
+function withVideoButton(body = '', url) {
+  if (!url || body.includes(url)) return body
+  const base = body.replace(/\s+$/, '')
+  return `${base}${base ? '\n\n' : ''}${videoButtonMd(url)}\n`
+}
+function withoutVideoButton(body = '', url) {
+  if (!url) return body
+  const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return body.replace(new RegExp(`\\n*\\[[^\\]]*\\]\\(${escaped}\\)\\n*`, 'g'), '\n').replace(/\n{3,}/g, '\n\n').trim()
+}
 function fuzzyContact(contacts, q = '') {
   const n = q.trim().toLowerCase()
   if (!n) return null
@@ -643,6 +708,21 @@ function Composer({ email, setEmail, contact, setContact, contacts, onAttachAsse
         )}
       </div>
 
+      {/* reply thread history — clean by default, included only on opt-in */}
+      {email.quoted && (
+        <div className="px-5 pb-3">
+          <button
+            onClick={() => setEmail((e) => ({ ...e, includeHistory: !e.includeHistory }))}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] transition-colors ${email.includeHistory ? 'border-gold-400/50 bg-gold-400/10 text-gold-100' : 'border-white/10 bg-white/[0.02] text-gray-400 hover:text-gray-200'}`}>
+            <span className="font-mono">···</span>
+            {email.includeHistory ? 'Original message included' : 'Include original message'}
+          </button>
+          {email.includeHistory && (
+            <pre className="ds-scroll mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-ink-950/40 px-3 py-2 font-sans text-[11px] leading-relaxed text-gray-500">{email.quoted}</pre>
+          )}
+        </div>
+      )}
+
       {/* attachment previews */}
       {email.attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 px-5 pb-4">
@@ -692,13 +772,32 @@ function Field({ label, value, onChange, placeholder, bold, right, list }) {
 }
 
 function AttachChip({ a, onRemove }) {
+  const failed = a.failed
+  const uploading = a.uploading
+  const hostedVideo = a.kind === 'video' && a.url
+  const border = failed ? 'border-rose-400/40' : hostedVideo ? 'border-blue-400/30' : 'border-white/10'
   return (
-    <div className="ds-pop group flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] py-2 pl-2.5 pr-2">
-      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-gold-400/25 bg-gold-400/[0.06] text-gold-300"><Ic name={a.icon} className="h-4 w-4" /></span>
+    <div className={`ds-pop group flex items-center gap-2.5 rounded-xl border ${border} bg-white/[0.03] py-2 pl-2.5 pr-2`}>
+      <span className={`relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border ${failed ? 'border-rose-400/30 text-rose-300' : 'border-gold-400/25 bg-gold-400/[0.06] text-gold-300'}`}>
+        {a.kind === 'image' && a.url
+          ? <img src={a.url} alt="" className="h-full w-full object-cover" />
+          : <Ic name={a.icon} className="h-4 w-4" />}
+        {a.kind === 'video' && <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white"><I.Play className="h-3.5 w-3.5" /></span>}
+      </span>
       <div className="min-w-0">
-        <div className="max-w-[160px] truncate text-xs font-medium text-gray-200">{a.label}</div>
-        <div className="flex items-center gap-1.5 font-mono text-[10px] text-gray-500">
-          {a.size}{a.secure && <span className="inline-flex items-center gap-0.5 rounded bg-blue-400/10 px-1 text-blue-300"><I.LinkIcon className="h-2.5 w-2.5" /> secure link</span>}
+        <div className="max-w-[170px] truncate text-xs font-medium text-gray-200">{a.label}</div>
+        <div className="flex items-center gap-1.5 font-mono text-[10px]">
+          {uploading ? (
+            <span className="inline-flex items-center gap-1 text-blue-300"><span className="ds-typing"><span /><span /><span /></span> uploading…</span>
+          ) : failed ? (
+            <span className="text-rose-300" title={a.error}>upload failed — remove &amp; retry</span>
+          ) : hostedVideo ? (
+            <a href={a.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 rounded bg-blue-400/10 px-1 text-blue-300 hover:text-blue-200"><I.LinkIcon className="h-2.5 w-2.5" /> hosted video link</a>
+          ) : a.url ? (
+            <span className="text-gray-500">{a.size} · <a href={a.url} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-gold-200">preview</a></span>
+          ) : (
+            <span className="text-gray-500">{a.size}</span>
+          )}
         </div>
       </div>
       <button onClick={onRemove} className="ml-1 text-gray-600 opacity-0 transition-opacity hover:text-rose-300 group-hover:opacity-100">✕</button>
