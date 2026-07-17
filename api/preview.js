@@ -14,7 +14,7 @@
 // route, so it doesn't count against the function budget).
 // ============================================================================
 import { Readable } from 'node:stream'
-import { sb, sbInsert, sbConfigured } from './_sb.js'
+import { sb, sbInsert, sbSelect, sbConfigured } from './_sb.js'
 import { getPreview, internalAssetUrl, genToken, previewUrl, parseUA, geoFrom, readBody, SITE } from './_preview.js'
 
 export const config = { maxDuration: 60 }
@@ -123,8 +123,26 @@ async function streamAsset(req, res) {
 }
 
 /* ── Ready-to-Launch responses (pipeline + notify) ────────────────────────── */
-const NOTIFY_TO = process.env.EMAIL_NOTIFY || 'hello@digitalskylineco.com'
+// Owner notification inbox. hello@digitalskylineco.com is the SENDING (Resend)
+// address only and bounces as a destination, so it must never be the recipient.
+// Recipient resolution order:
+//   1. Settings → Email → "Owner Notification Email" (email_settings.data)
+//   2. EMAIL_NOTIFY env var
+//   3. hardcoded default below
+const NOTIFY_DEFAULT = 'pernellanderson55@gmail.com'
 const FROM = process.env.EMAIL_FROM || 'Digital Skyline Co. <hello@digitalskylineco.com>'
+
+async function resolveNotifyTo() {
+  try {
+    const rows = await sbSelect('email_settings', 'id=eq.true&select=data')
+    const configured = rows[0]?.data?.owner_notification_email
+    if (typeof configured === 'string' && configured.trim()) return configured.trim()
+  } catch (e) {
+    // email_settings table may not exist yet — fall through to env/default.
+    console.warn('[preview.notify] owner_notification_email lookup failed:', e.message)
+  }
+  return process.env.EMAIL_NOTIFY || NOTIFY_DEFAULT
+}
 const R_LABEL = { loved: '🚀 Loves it — ready to build', changes: '✏️ Wants a few changes', consult: '📅 Wants a consultation' }
 
 async function respond({ token, action, note }, res) {
@@ -157,17 +175,21 @@ async function respond({ token, action, note }, res) {
 async function notify(p, action, note) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) return
+  const notifyTo = await resolveNotifyTo()
   const who = p.business_name || p.contact_email || 'A prospect'
   const esc = (s = '') => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const demoUrl = p.token ? previewUrl(p.token) : null
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
     <h2 style="margin:0 0 6px">${R_LABEL[action]}</h2>
     <p style="margin:0 0 4px;color:#444"><b>${esc(who)}</b>${p.owner_name ? ` · ${esc(p.owner_name)}` : ''}${p.contact_email ? ` · ${esc(p.contact_email)}` : ''}</p>
     ${note ? `<p style="margin:12px 0;padding:12px;background:#f6f4ee;border-radius:8px;color:#333">“${esc(note)}”</p>` : ''}
+    ${demoUrl ? `<p style="margin:6px 0;font-size:14px">Preview: <a href="${demoUrl}" style="color:#a87f22">${esc(demoUrl)}</a></p>` : ''}
+    ${p.live_site_url ? `<p style="margin:6px 0;font-size:14px">Live/demo site: <a href="${esc(p.live_site_url)}" style="color:#a87f22">${esc(p.live_site_url)}</a></p>` : ''}
     <p style="margin:14px 0;color:#666;font-size:13px">Responded ${new Date().toLocaleString()} · viewed ${p.view_count || 0}×</p>
     ${p.prospect_id ? `<p style="margin:0"><a href="${SITE}/admin" style="color:#a87f22">Open in Digital Skyline Admin →</a></p>` : ''}
   </div>`
   await fetch('https://api.resend.com/emails', {
     method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [NOTIFY_TO], subject: `${R_LABEL[action]} — ${who}`, html }),
+    body: JSON.stringify({ from: FROM, to: [notifyTo], subject: `${R_LABEL[action]} — ${who}`, html }),
   })
 }
