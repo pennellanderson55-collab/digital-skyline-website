@@ -1,75 +1,332 @@
-# Digital Skyline Co. — Premium AI Agency Website
+# Digital Skyline
 
-A brand-new, immersive marketing site for **Digital Skyline Co.**, built with
-React + Vite + Tailwind CSS. Luxury technology aesthetic: black background,
-metallic gold accents, holographic dashboards, an interactive AI website
-scanner, floating data cards, and an animated neural-network background.
+> **AI-Powered Business Operations Platform**
 
-## Stack
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES6-F7DF1E?logo=javascript&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?logo=tailwindcss&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Database-3ECF8E?logo=supabase&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?logo=postgresql&logoColor=white)
+![Stripe](https://img.shields.io/badge/Stripe-Payments-635BFF?logo=stripe&logoColor=white)
+![Vercel](https://img.shields.io/badge/Vercel-Deployed-black?logo=vercel)
 
-- **React 18** + **Vite 6**
-- **Tailwind CSS 3**
-- Zero runtime UI dependencies (custom canvas + inline SVG)
+Digital Skyline is a full-stack business operations platform designed to help service-based businesses manage leads, automate outreach, analyze websites, communicate with clients, schedule consultations, and securely process payments—all from one centralized dashboard.
 
-## Getting started
+Originally developed as a modern agency website, the platform has evolved into a production-ready application demonstrating full-stack software engineering, cloud deployment, database architecture, AI integration, and business automation.
 
-```bash
-npm install
-npm run dev      # start the dev server (http://localhost:5173)
-npm run build    # production build → dist/
-npm run preview  # preview the production build
+---
+
+# Live Application
+
+🌐 **Website:** https://www.digitalskylineco.com
+
+---
+
+# Features
+
+## Public Website
+
+- Responsive landing pages
+- Service showcase
+- Portfolio gallery
+- Pricing plans
+- FAQ section
+- Contact forms
+- Consultation booking
+- Mobile-first design
+- SEO optimization
+
+---
+
+## Customer Relationship Management (CRM)
+
+- Lead management
+- Client management
+- Business profiles
+- Contact information
+- Status tracking
+- Notes
+- Follow-up reminders
+- Duplicate detection
+
+---
+
+## AI Website Intelligence
+
+Automatically evaluates business websites and generates actionable recommendations.
+
+Analysis includes:
+
+- Mobile responsiveness
+- Search engine optimization
+- HTTPS security
+- Booking functionality
+- Testimonials
+- Frequently asked questions
+- Performance observations
+- User experience improvements
+
+---
+
+## AI Outreach
+
+Generate personalized outreach content for potential clients.
+
+Features include:
+
+- Personalized email generation
+- AI-generated talking points
+- Follow-up suggestions
+- Business summaries
+- Outreach history
+
+---
+
+## Communications Center
+
+Manage business communication from one dashboard.
+
+Supports:
+
+- Branded email sending
+- Photo attachments
+- Video attachments
+- Secure call-to-action buttons
+- AI-assisted email writing
+
+---
+
+## Consultation Management
+
+- Calendar scheduling
+- Appointment requests
+- Time-slot selection
+- Business information collection
+- Consultation workflow
+
+---
+
+## Payments
+
+Integrated Stripe payment processing.
+
+Includes:
+
+- Secure payment links
+- Revenue tracking
+- Payment status
+- Client payments
+- Webhook support
+
+---
+
+# Technology Stack
+
+## Frontend
+
+- React
+- JavaScript
+- Vite
+- Tailwind CSS
+- HTML5
+- CSS3
+
+## Backend
+
+- Supabase
+- PostgreSQL
+- Authentication
+- Row Level Security
+- Serverless Functions
+
+## APIs & Integrations
+
+- Stripe
+- Anthropic API
+- Resend
+- Vercel
+
+## Development Tools
+
+- Git
+- GitHub
+- Visual Studio Code
+- Claude Code
+- ChatGPT
+
+---
+
+# Project Structure
+
+```text
+digital-skyline/
+
+├── api/
+├── public/
+├── scripts/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   ├── hooks/
+│   ├── services/
+│   ├── utils/
+│   └── assets/
+│
+├── supabase/
+├── package.json
+├── vite.config.js
+├── tailwind.config.js
+├── vercel.json
+├── .env.example
+└── README.md
 ```
 
-## Screenshots
+---
+
+# Screenshots
 
 ### Homepage
 
-![Homepage — hero with AI core product shot](public/screenshots/Homepage.png)
+![Homepage](public/screenshots/Homepage.png)
 
 ### Admin Dashboard
 
-![Admin dashboard](public/screenshots/Dashboard.png)
+![Admin Dashboard](public/screenshots/Dashboard.png)
 
 ### CRM
 
 ![CRM](public/screenshots/CRM.png)
 
-### Communications Center
+### Website Intelligence
 
-![Communications center](public/screenshots/Communications-center.png)
+![Website Intelligence](public/screenshots/Website%20Intelligence.png)
 
 ### AI Outreach
 
-![AI outreach](public/screenshots/ai-outreach.png)
+![AI Outreach](public/screenshots/ai-outreach.png)
 
-### Website Intelligence
+### Communications Center
 
-![Website intelligence](public/screenshots/Website%20Intelligence.png)
+![Communications Center](public/screenshots/Communications-center.png)
 
-## Sections
+### Consultation Booking
 
-1. **Hero** — cinematic 40/60 split. Left (40%): eyebrow "Premium Software & Web Studio", headline "Websites & Apps Built For Businesses Of Every Size", subheadline, dual CTA, and the four capabilities (Custom Websites · Applications · Dashboards · Business Systems). Right (60%): a large **AI Core "product shot"** that sits low and bleeds off the edge — a full-bleed tilted financial-dashboard floor (charts run under the rings), layered glass holographic rings, traveling gold light streaks, volumetric glow, ambient shadow + reflection, depth-of-field, floating particles, and mouse parallax. Circular SVG logo badge; neural background. Knobs flagged with `◆` in `AICore.jsx`.
-2. **Trust bar** — four capabilities (Custom Websites · Applications · Dashboards · Business Systems); no fake logos or statistics
-3. **What We Do** — six-card services grid (Websites, Apps, Portals, Automation, Growth/SEO, Brand)
-4. **Portfolio Gallery — "See What We've Built"** — featured case study (Family Dynasty App) with phone mockup, secondary case studies (Influencer Finder, Readi Rentals Dashboard) with browser mockups + hover animations, and a "future client projects" invitation card
-5. **Pricing** — three-tier plans (Launch / Skyline / Enterprise)
-6. **FAQ** — accordion
-7. **Book Your Free Consultation** — premium calendar-booking section: left explains what happens on the call (3 bullets); right is a glassmorphism booking card with a month calendar (prev/next, gold selected date, weekday/past dates disabled), time-slot buttons, Name/Email/Business inputs, a "What do you need help with?" dropdown, and a success state. Front-end only — fake availability, no backend.
+(Add screenshot)
 
-Primary CTA throughout: **Book a Free Consultation** (anchors to `#consultation`).
+### Revenue Dashboard
 
-> Note: the consultation form is a front-end demo — no backend is wired up. The
-> portfolio device mockups are pure CSS/SVG (no external image/video assets).
+(Add screenshot)
 
-### Hero visual — image or code
+---
 
-The right side of the hero renders via [HeroVisual.jsx](src/components/HeroVisual.jsx):
+# Running Locally
 
-- **With an image:** drop an isolated render of the core / right-side visual at
-  `public/hero-core.png` (PNG/JPG/WebP — edit `IMG_SRC` in the component). It is
-  layered with subtle animation on top — mouse parallax, breathing volumetric
-  glow, a slow gold light-sweep, drifting particles, and vignettes. Use an
-  isolated core render, **not** the full-page screenshot (that would duplicate
-  the headline text). A dark/transparent background blends best.
-- **Without an image:** it falls back automatically to the fully-coded, animated
-  `AICore` — so the hero always renders.
+Clone the repository
+
+```bash
+git clone https://github.com/YOUR_USERNAME/digital-skyline.git
+```
+
+Move into the project
+
+```bash
+cd digital-skyline
+```
+
+Install dependencies
+
+```bash
+npm install
+```
+
+Create your environment file
+
+```bash
+cp .env.example .env.local
+```
+
+Add your environment variables.
+
+Start the development server.
+
+```bash
+npm run dev
+```
+
+---
+
+# Environment Variables
+
+Sensitive credentials are stored using environment variables.
+
+Example values are provided in:
+
+```text
+.env.example
+```
+
+No production credentials are committed to this repository.
+
+---
+
+# Engineering Highlights
+
+This project demonstrates experience with:
+
+- Full Stack Development
+- React Architecture
+- Database Design
+- REST APIs
+- Authentication
+- Payment Processing
+- Email Automation
+- AI Integration
+- Cloud Deployment
+- Responsive UI Design
+- Performance Optimization
+- Git Workflow
+- Production Debugging
+
+---
+
+# Roadmap
+
+Future improvements include:
+
+- Advanced analytics
+- Team collaboration
+- Role-based permissions
+- Workflow automation
+- AI recommendations
+- Reporting dashboard
+- Client portal
+- Expanded CRM capabilities
+
+---
+
+# Developer
+
+## Pernell Anderson
+
+Full Stack Developer focused on building scalable web applications, AI-powered business software, and automation platforms.
+
+### Connect
+
+Portfolio  
+Coming Soon...
+
+GitHub  
+https://github.com/pennellanderson55-collab/digital-skyline-website
+
+LinkedIn  
+https://www.linkedin.com/in/pennell-anderson-a407473b3/?skipRedirect=true
+
+Email  
+hello@digitalskylineco.com
+
+---
+
+# License
+
+This project is licensed for portfolio and educational purposes.
