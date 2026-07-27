@@ -20,6 +20,32 @@ npm run build    # production build → dist/
 npm run preview  # preview the production build
 ```
 
+## Screenshots
+
+### Homepage
+
+![Homepage — hero with AI core product shot](public/screenshots/Homepage.png)
+
+### Admin Dashboard
+
+![Admin dashboard](public/screenshots/Dashboard.png)
+
+### CRM
+
+![CRM](public/screenshots/CRM.png)
+
+### Communications Center
+
+![Communications center](public/screenshots/Communications-center.png)
+
+### AI Outreach
+
+![AI outreach](public/screenshots/ai-outreach.png)
+
+### Website Intelligence
+
+![Website intelligence](public/screenshots/Website%20Intelligence.png)
+
 ## Sections
 
 1. **Hero** — cinematic 40/60 split. Left (40%): eyebrow "Premium Software & Web Studio", headline "Websites & Apps Built For Businesses Of Every Size", subheadline, dual CTA, and the four capabilities (Custom Websites · Applications · Dashboards · Business Systems). Right (60%): a large **AI Core "product shot"** that sits low and bleeds off the edge — a full-bleed tilted financial-dashboard floor (charts run under the rings), layered glass holographic rings, traveling gold light streaks, volumetric glow, ambient shadow + reflection, depth-of-field, floating particles, and mouse parallax. Circular SVG logo badge; neural background. Knobs flagged with `◆` in `AICore.jsx`.
