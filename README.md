@@ -212,11 +212,11 @@ digital-skyline/
 
 ### Consultation Booking
 
-(Add screenshot)
+![Consultation Booking](public/screenshots/consultation-booking.png)
 
 ### Revenue Dashboard
 
-(Add screenshot)
+![Revenue Dashboard](public/screenshots/revenue-dashboard.png)
 
 ---
 
