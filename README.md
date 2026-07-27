@@ -188,27 +188,27 @@ digital-skyline/
 
 ### Homepage
 
-(Add screenshot)
+![Homepage](public/screenshots/Homepage.png)
 
 ### Admin Dashboard
 
-(Add screenshot)
+![Admin Dashboard](public/screenshots/Dashboard.png)
 
 ### CRM
 
-(Add screenshot)
+![CRM](public/screenshots/CRM.png)
 
 ### Website Intelligence
 
-(Add screenshot)
+![Website Intelligence](public/screenshots/Website%20Intelligence.png)
 
 ### AI Outreach
 
-(Add screenshot)
+![AI Outreach](public/screenshots/ai-outreach.png)
 
 ### Communications Center
 
-(Add screenshot)
+![Communications Center](public/screenshots/Communications-center.png)
 
 ### Consultation Booking
 
